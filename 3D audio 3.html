@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Audio Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(45deg, #0a0a0a, #1a1a2e, #16213e);
+            overflow: hidden;
+            color: white;
+        }
+        
+        #app {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 100;
+            min-width: 300px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #ccc;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            outline: none;
+            border-radius: 3px;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            background: linear-gradient(45deg, #ff006e, #8338ec);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        input[type="file"] {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+        }
+        
+        select {
+            width: 100%;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+        }
+        
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(45deg, #ff006e, #8338ec);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 0, 110, 0.4);
+        }
+        
+        .mic-button {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            margin-bottom: 10px;
+        }
+        
+        .demo-button {
+            background: linear-gradient(45deg, #a8edea, #fed6e3);
+            color: #333;
+            margin-bottom: 10px;
+        }
+        
+        .demo-button:hover {
+            box-shadow: 0 5px 15px rgba(168, 237, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .active-source {
+            color: #4ecdc4;
+            font-weight: bold;
+        }
+        
+        .audio-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            border-radius: 10px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            z-index: 100;
+        }
+        
+        .visualizer-title {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(45deg, #ff006e, #8338ec, #3a86ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .demo-note {
+            font-size: 12px;
+            color: #888;
+            margin-top: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div id="canvas-container"></div>
+        
+        <div class="controls">
+            <h2 class="visualizer-title">3D Audio Visualizer</h2>
+            
+            <div class="control-group">
+                <label for="audio-file">Load Audio File:</label>
+                <input type="file" id="audio-file" accept="audio/*" @change="loadAudio">
+            </div>
+            
+            <div class="control-group">
+                <button @click="startMicrophone" :disabled="microphoneActive" class="mic-button">
+                    🎤 {{ microphoneActive ? 'Microphone Active' : 'Use Microphone' }}
+                </button>
+            </div>
+            
+            <div class="control-group">
+                <button @click="playDemoAudio" :disabled="isPlaying" class="demo-button">
+                    🎵 Play Demo Audio
+                </button>
+            </div>
+            
+            <div class="control-group">
+                <button @click="togglePlayPause" :disabled="!audioLoaded && !microphoneActive">
+                    {{ isPlaying ? 'Pause' : 'Play' }}
+                </button>
+            </div>
+            
+            <div class="control-group">
+                <label for="visualizer-type">Visualizer Type:</label>
+                <select v-model="visualizerType" @change="changeVisualizerType">
+                    <option value="particles">Particles</option>
+                    <option value="waves">Waves</option>
+                    <option value="bars">Bars</option>
+                    <option value="sphere">Sphere</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="sensitivity">Sensitivity: {{ sensitivity }}</label>
+                <input type="range" id="sensitivity" min="0.1" max="5" step="0.1" v-model="sensitivity">
+            </div>
+            
+            <div class="control-group">
+                <label for="color-speed">Color Speed: {{ colorSpeed }}</label>
+                <input type="range" id="color-speed" min="0.1" max="3" step="0.1" v-model="colorSpeed">
+            </div>
+            
+            <div class="control-group">
+                <label for="particle-count">Particle Count: {{ particleCount }}</label>
+                <input type="range" id="particle-count" min="500" max="5000" step="100" v-model="particleCount">
+            </div>
+            
+            <div class="demo-note">
+                Try the microphone or demo audio to get started!
+            </div>
+        </div>
+        
+        <div class="audio-info" v-if="audioLoaded || microphoneActive">
+            <div><strong>Status:</strong> {{ isPlaying ? 'Playing' : 'Paused' }}</div>
+            <div><strong>Source:</strong> <span :class="{ 'active-source': true }">{{ audioSource }}</span></div>
+            <div><strong>Type:</strong> {{ visualizerType }}</div>
+            <div><strong>Frequency:</strong> {{ currentFrequency }}Hz</div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                return {
+                    // Audio
+                    audioContext: null,
+                    audioElement: null,
+                    analyser: null,
+                    dataArray: null,
+                    source: null,
+                    isPlaying: false,
+                    audioLoaded: false,
+                    microphoneActive: false,
+                    audioSource: 'None',
+                    
+                    // Three.js
+                    scene: null,
+                    camera: null,
+                    renderer: null,
+                    particles: null,
+                    
+                    // Controls
+                    visualizerType: 'particles',
+                    sensitivity: 2.0,
+                    colorSpeed: 1.0,
+                    particleCount: 2000,
+                    
+                    // Animation
+                    animationId: null,
+                    time: 0,
+                    currentFrequency: 0,
+                    
+                    // Visualizer objects
+                    visualizerObjects: {
+                        particles: null,
+                        waves: null,
+                        bars: null,
+                        sphere: null
+                    }
+                }
+            },
+            
+            mounted() {
+                this.initThreeJS();
+                this.initAudio();
+                this.createVisualizers();
+                this.animate();
+            },
+            
+            methods: {
+                initThreeJS() {
+                    // Scene
+                    this.scene = new THREE.Scene();
+                    this.scene.background = new THREE.Color(0x000000);
+                    
+                    // Camera
+                    this.camera = new THREE.PerspectiveCamera(
+                        75,
+                        window.innerWidth / window.innerHeight,
+                        0.1,
+                        1000
+                    );
+                    this.camera.position.z = 50;
+                    
+                    // Renderer
+                    this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                    this.renderer.setPixelRatio(window.devicePixelRatio);
+                    
+                    const container = document.getElementById('canvas-container');
+                    container.appendChild(this.renderer.domElement);
+                    
+                    // Handle resize
+                    window.addEventListener('resize', this.onWindowResize);
+                },
+                
+                initAudio() {
+                    // Initialize Web Audio API
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.analyser = this.audioContext.createAnalyser();
+                    this.analyser.fftSize = 512;
+                    
+                    const bufferLength = this.analyser.frequencyBinCount;
+                    this.dataArray = new Uint8Array(bufferLength);
+                },
+                
+                createVisualizers() {
+                    // Particles
+                    this.createParticles();
+                    
+                    // Waves
+                    this.createWaves();
+                    
+                    // Bars
+                    this.createBars();
+                    
+                    // Sphere
+                    this.createSphere();
+                    
+                    // Show only the selected visualizer
+                    this.changeVisualizerType();
+                },
+                
+                createParticles() {
+                    const geometry = new THREE.BufferGeometry();
+                    const positions = new Float32Array(this.particleCount * 3);
+                    const colors = new Float32Array(this.particleCount * 3);
+                    
+                    for (let i = 0; i < this.particleCount; i++) {
+                        const i3 = i * 3;
+                        positions[i3] = (Math.random() - 0.5) * 100;
+                        positions[i3 + 1] = (Math.random() - 0.5) * 100;
+                        positions[i3 + 2] = (Math.random() - 0.5) * 100;
+                        
+                        colors[i3] = Math.random();
+                        colors[i3 + 1] = Math.random();
+                        colors[i3 + 2] = Math.random();
+                    }
+                    
+                    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                    
+                    const material = new THREE.PointsMaterial({
+                        size: 2,
+                        vertexColors: true,
+                        transparent: true,
+                        opacity: 0.8
+                    });
+                    
+                    this.visualizerObjects.particles = new THREE.Points(geometry, material);
+                    this.scene.add(this.visualizerObjects.particles);
+                },
+                
+                createWaves() {
+                    const geometry = new THREE.PlaneGeometry(100, 100, 64, 64);
+                    const material = new THREE.MeshBasicMaterial({
+                        color: 0x8338ec,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.6
+                    });
+                    
+                    this.visualizerObjects.waves = new THREE.Mesh(geometry, material);
+                    this.visualizerObjects.waves.rotation.x = -Math.PI / 2;
+                    this.scene.add(this.visualizerObjects.waves);
+                },
+                
+                createBars() {
+                    const group = new THREE.Group();
+                    const barCount = 64;
+                    
+                    for (let i = 0; i < barCount; i++) {
+                        const geometry = new THREE.BoxGeometry(1, 1, 1);
+                        const material = new THREE.MeshBasicMaterial({
+                            color: new THREE.Color().setHSL(i / barCount, 1, 0.5)
+                        });
+                        
+                        const bar = new THREE.Mesh(geometry, material);
+                        const angle = (i / barCount) * Math.PI * 2;
+                        bar.position.x = Math.cos(angle) * 20;
+                        bar.position.z = Math.sin(angle) * 20;
+                        
+                        group.add(bar);
+                    }
+                    
+                    this.visualizerObjects.bars = group;
+                    this.scene.add(this.visualizerObjects.bars);
+                },
+                
+                createSphere() {
+                    const geometry = new THREE.SphereGeometry(15, 32, 32);
+                    const material = new THREE.MeshBasicMaterial({
+                        color: 0xff006e,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.7
+                    });
+                    
+                    this.visualizerObjects.sphere = new THREE.Mesh(geometry, material);
+                    this.scene.add(this.visualizerObjects.sphere);
+                },
+                
+                loadAudio(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    this.stopMicrophone();
+                    
+                    const url = URL.createObjectURL(file);
+                    
+                    if (this.audioElement) {
+                        this.audioElement.pause();
+                    }
+                    
+                    this.audioElement = new Audio(url);
+                    this.audioElement.crossOrigin = 'anonymous';
+                    
+                    this.audioElement.addEventListener('loadeddata', () => {
+                        if (this.source) {
+                            this.source.disconnect();
+                        }
+                        
+                        this.source = this.audioContext.createMediaElementSource(this.audioElement);
+                        this.source.connect(this.analyser);
+                        this.analyser.connect(this.audioContext.destination);
+                        
+                        this.audioLoaded = true;
+                        this.audioSource = file.name;
+                    });
+                    
+                    this.audioElement.load();
+                },
+                
+                async startMicrophone() {
+                    try {
+                        this.stopAudio();
+                        
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        
+                        if (this.source) {
+                            this.source.disconnect();
+                        }
+                        
+                        this.source = this.audioContext.createMediaStreamSource(stream);
+                        this.source.connect(this.analyser);
+                        
+                        this.microphoneActive = true;
+                        this.isPlaying = true;
+                        this.audioSource = 'Microphone';
+                        
+                        if (this.audioContext.state === 'suspended') {
+                            await this.audioContext.resume();
+                        }
+                    } catch (error) {
+                        alert('Microphone access denied or not available');
+                        console.error('Microphone error:', error);
+                    }
+                },
+                
+                playDemoAudio() {
+                    this.stopMicrophone();
+                    
+                    // Create a simple demo tone using Web Audio API
+                    const oscillator = this.audioContext.createOscillator();
+                    const gainNode = this.audioContext.createGain();
+                    
+                    // Connect nodes
+                    oscillator.connect(gainNode);
+                    gainNode.connect(this.analyser);
+                    this.analyser.connect(this.audioContext.destination);
+                    
+                    // Set up oscillator
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(440, this.audioContext.currentTime);
+                    
+                    // Create a melody
+                    const notes = [440, 523, 659, 784, 880, 784, 659, 523];
+                    let noteIndex = 0;
+                    
+                    const playNote = () => {
+                        if (noteIndex < notes.length && this.isPlaying) {
+                            oscillator.frequency.setValueAtTime(notes[noteIndex], this.audioContext.currentTime);
+                            noteIndex++;
+                            setTimeout(playNote, 500);
+                        } else {
+                            oscillator.stop();
+                            this.isPlaying = false;
+                        }
+                    };
+                    
+                    // Start playing
+                    oscillator.start();
+                    this.isPlaying = true;
+                    this.audioSource = 'Demo Audio';
+                    playNote();
+                    
+                    // Stop after melody
+                    setTimeout(() => {
+                        if (this.isPlaying) {
+                            oscillator.stop();
+                            this.isPlaying = false;
+                        }
+                    }, 4000);
+                },
+                
+                stopAudio() {
+                    if (this.audioElement) {
+                        this.audioElement.pause();
+                        this.audioElement.currentTime = 0;
+                    }
+                    this.audioLoaded = false;
+                    this.isPlaying = false;
+                },
+                
+                stopMicrophone() {
+                    if (this.microphoneActive && this.source && this.source.mediaStream) {
+                        this.source.mediaStream.getTracks().forEach(track => track.stop());
+                    }
+                    this.microphoneActive = false;
+                    this.isPlaying = false;
+                },
+                
+                togglePlayPause() {
+                    if (!this.audioElement) return;
+                    
+                    if (this.audioContext.state === 'suspended') {
+                        this.audioContext.resume();
+                    }
+                    
+                    if (this.isPlaying) {
+                        this.audioElement.pause();
+                    } else {
+                        this.audioElement.play();
+                    }
+                    
+                    this.isPlaying = !this.isPlaying;
+                },
+                
+                changeVisualizerType() {
+                    // Hide all visualizers
+                    Object.values(this.visualizerObjects).forEach(obj => {
+                        if (obj) obj.visible = false;
+                    });
+                    
+                    // Show selected visualizer
+                    if (this.visualizerObjects[this.visualizerType]) {
+                        this.visualizerObjects[this.visualizerType].visible = true;
+                    }
+                },
+                
+                animate() {
+                    this.animationId = requestAnimationFrame(this.animate);
+                    
+                    this.time += 0.01;
+                    
+                    if (this.analyser && this.isPlaying) {
+                        this.analyser.getByteFrequencyData(this.dataArray);
+                        this.updateVisualizers();
+                    }
+                    
+                    // Rotate camera around scene
+                    this.camera.position.x = Math.cos(this.time * 0.1) * 50;
+                    this.camera.position.z = Math.sin(this.time * 0.1) * 50;
+                    this.camera.lookAt(0, 0, 0);
+                    
+                    this.renderer.render(this.scene, this.camera);
+                },
+                
+                updateVisualizers() {
+                    const avg = this.dataArray.reduce((a, b) => a + b) / this.dataArray.length;
+                    this.currentFrequency = Math.round(avg);
+                    
+                    switch (this.visualizerType) {
+                        case 'particles':
+                            this.updateParticles();
+                            break;
+                        case 'waves':
+                            this.updateWaves();
+                            break;
+                        case 'bars':
+                            this.updateBars();
+                            break;
+                        case 'sphere':
+                            this.updateSphere();
+                            break;
+                    }
+                },
+                
+                updateParticles() {
+                    const particles = this.visualizerObjects.particles;
+                    if (!particles) return;
+                    
+                    const positions = particles.geometry.attributes.position.array;
+                    const colors = particles.geometry.attributes.color.array;
+                    
+                    for (let i = 0; i < this.particleCount; i++) {
+                        const i3 = i * 3;
+                        const frequency = this.dataArray[i % this.dataArray.length];
+                        const scale = (frequency / 255) * this.sensitivity;
+                        
+                        // Update positions with audio data
+                        positions[i3 + 1] += (Math.random() - 0.5) * scale;
+                        
+                        // Update colors
+                        const hue = (this.time * this.colorSpeed + i * 0.01) % 1;
+                        const color = new THREE.Color().setHSL(hue, 1, 0.5);
+                        colors[i3] = color.r;
+                        colors[i3 + 1] = color.g;
+                        colors[i3 + 2] = color.b;
+                    }
+                    
+                    particles.geometry.attributes.position.needsUpdate = true;
+                    particles.geometry.attributes.color.needsUpdate = true;
+                },
+                
+                updateWaves() {
+                    const waves = this.visualizerObjects.waves;
+                    if (!waves) return;
+                    
+                    const positions = waves.geometry.attributes.position.array;
+                    const avg = this.dataArray.reduce((a, b) => a + b) / this.dataArray.length;
+                    
+                    for (let i = 0; i < positions.length; i += 3) {
+                        const x = positions[i];
+                        const z = positions[i + 2];
+                        const distance = Math.sqrt(x * x + z * z);
+                        const wave = Math.sin(distance * 0.1 + this.time * 2) * (avg / 255) * this.sensitivity * 10;
+                        positions[i + 1] = wave;
+                    }
+                    
+                    waves.geometry.attributes.position.needsUpdate = true;
+                    
+                    // Update color
+                    const hue = (this.time * this.colorSpeed) % 1;
+                    waves.material.color.setHSL(hue, 1, 0.5);
+                },
+                
+                updateBars() {
+                    const bars = this.visualizerObjects.bars;
+                    if (!bars) return;
+                    
+                    bars.children.forEach((bar, i) => {
+                        const frequency = this.dataArray[i % this.dataArray.length];
+                        const scale = (frequency / 255) * this.sensitivity;
+                        
+                        bar.scale.y = 1 + scale * 10;
+                        bar.position.y = (scale * 10) / 2;
+                        
+                        // Update color
+                        const hue = (this.time * this.colorSpeed + i * 0.1) % 1;
+                        bar.material.color.setHSL(hue, 1, 0.5);
+                    });
+                },
+                
+                updateSphere() {
+                    const sphere = this.visualizerObjects.sphere;
+                    if (!sphere) return;
+                    
+                    const avg = this.dataArray.reduce((a, b) => a + b) / this.dataArray.length;
+                    const scale = 1 + (avg / 255) * this.sensitivity;
+                    
+                    sphere.scale.setScalar(scale);
+                    sphere.rotation.x += 0.01;
+                    sphere.rotation.y += 0.02;
+                    
+                    // Update color
+                    const hue = (this.time * this.colorSpeed) % 1;
+                    sphere.material.color.setHSL(hue, 1, 0.5);
+                },
+                
+                onWindowResize() {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                }
+            },
+            
+            beforeUnmount() {
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                }
+                
+                if (this.audioElement) {
+                    this.audioElement.pause();
+                }
+                
+                if (this.audioContext) {
+                    this.audioContext.close();
+                }
+                
+                window.removeEventListener('resize', this.onWindowResize);
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
