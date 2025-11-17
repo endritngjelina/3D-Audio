@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Audio Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            overflow: hidden;
+            color: white;
+        }
+
+        #app {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #visualizer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            min-width: 300px;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 14px;
+            color: #ccc;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        select {
+            width: 100%;
+            padding: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .play-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .play-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+        }
+
+        .play-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .color-picker {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .color-option {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .color-option.active {
+            border-color: white;
+            transform: scale(1.1);
+        }
+
+        .stats {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 12px;
+            color: #ccc;
+        }
+
+        .info-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 15;
+            color: white;
+            font-size: 18px;
+            text-align: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #ff6b6b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <canvas id="visualizer"></canvas>
+        
+        <div class="controls">
+            <div class="control-group">
+                <label>Audio Source</label>
+                <select v-model="audioSource" @change="handleAudioSourceChange">
+                    <option value="file">Upload Audio File</option>
+                    <option value="beat">Generated Beat</option>
+                    <option value="melody">Generated Melody</option>
+                    <option value="ambient">Ambient Sounds</option>
+                    <option value="bass">Bass Drop</option>
+                </select>
+            </div>
+            
+            <div class="control-group" v-if="audioSource === 'file'">
+                <input type="file" @change="loadAudio" accept="audio/*">
+            </div>
+            
+            <div class="control-group" v-if="audioSource !== 'file'">
+                <label>Generated Audio Settings</label>
+                <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <div style="flex: 1;">
+                        <label style="font-size: 12px;">Tempo: {{ tempo }} BPM</label>
+                        <input type="range" v-model="tempo" min="60" max="180" step="10">
+                    </div>
+                    <div style="flex: 1;">
+                        <label style="font-size: 12px;">Volume: {{ volume }}%</label>
+                        <input type="range" v-model="volume" min="0" max="100" step="5">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <button class="play-btn" @click="togglePlay" :disabled="!audioReady">
+                    {{ isPlaying ? 'Pause' : 'Play' }}
+                </button>
+            </div>
+            
+            <div class="control-group">
+                <label>Visualization Type</label>
+                <select v-model="visualType">
+                    <option value="particles">Particles</option>
+                    <option value="waves">Waves</option>
+                    <option value="bars">Bars</option>
+                    <option value="sphere">Sphere</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label>Color Theme</label>
+                <div class="color-picker">
+                    <div class="color-option" 
+                         v-for="(color, index) in colorThemes" 
+                         :key="index"
+                         :style="{ background: color.primary }"
+                         :class="{ active: selectedColor === index }"
+                         @click="selectedColor = index">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <label>Sensitivity: {{ sensitivity }}</label>
+                <input type="range" v-model="sensitivity" min="0.1" max="3" step="0.1">
+            </div>
+            
+            <div class="control-group">
+                <label>Particle Count: {{ particleCount }}</label>
+                <input type="range" v-model="particleCount" min="1000" max="10000" step="500">
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div>FPS: {{ fps }}</div>
+            <div>Particles: {{ currentParticleCount }}</div>
+            <div>Audio Level: {{ audioLevel }}%</div>
+        </div>
+        
+        <div class="info-overlay" v-if="!audioReady && audioSource === 'file'">
+            <p>Load an audio file to begin the experience</p>
+        </div>
+        
+        <div class="info-overlay" v-if="audioReady && !isPlaying && audioSource !== 'file'">
+            <p>Click Play to start the generated audio experience</p>
+        </div>
+        
+        <div class="loading" v-if="loading">
+            <div class="spinner"></div>
+            <p>Loading audio...</p>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    // Audio
+                    audio: null,
+                    audioContext: null,
+                    analyser: null,
+                    dataArray: null,
+                    audioLoaded: false,
+                    audioReady: false,
+                    isPlaying: false,
+                    loading: false,
+                    audioSource: 'beat',
+                    
+                    // Generated Audio
+                    oscillators: [],
+                    gainNode: null,
+                    tempo: 120,
+                    volume: 50,
+                    beatPattern: null,
+                    melodyPattern: null,
+                    bassPattern: null,
+                    
+                    // Three.js
+                    scene: null,
+                    camera: null,
+                    renderer: null,
+                    particles: null,
+                    particleSystem: null,
+                    waveGeometry: null,
+                    barsGroup: null,
+                    sphereGeometry: null,
+                    
+                    // Controls
+                    visualType: 'particles',
+                    selectedColor: 0,
+                    sensitivity: 1.5,
+                    particleCount: 5000,
+                    
+                    // Stats
+                    fps: 0,
+                    currentParticleCount: 0,
+                    audioLevel: 0,
+                    
+                    // Animation
+                    animationId: null,
+                    time: 0,
+                    lastTime: 0,
+                    
+                    colorThemes: [
+                        { primary: '#ff6b6b', secondary: '#4ecdc4' },
+                        { primary: '#a8e6cf', secondary: '#ffd93d' },
+                        { primary: '#ff8a80', secondary: '#b388ff' },
+                        { primary: '#64b5f6', secondary: '#4db6ac' },
+                        { primary: '#ffb74d', secondary: '#f06292' },
+                        { primary: '#81c784', secondary: '#7986cb' }
+                    ]
+                };
+            },
+            
+            mounted() {
+                this.initThreeJS();
+                this.animate();
+            },
+            
+            watch: {
+                visualType() {
+                    this.updateVisualization();
+                },
+                selectedColor() {
+                    this.updateColors();
+                },
+                particleCount() {
+                    if (this.visualType === 'particles') {
+                        this.createParticles();
+                    }
+                },
+                tempo() {
+                    if (this.isPlaying && this.audioSource !== 'file') {
+                        this.handleAudioSourceChange();
+                        this.startGeneratedAudio();
+                    }
+                },
+                volume() {
+                    if (this.gainNode) {
+                        this.gainNode.gain.value = this.volume / 100;
+                    }
+                }
+            },
+            
+            methods: {
+                initThreeJS() {
+                    const canvas = document.getElementById('visualizer');
+                    
+                    // Scene
+                    this.scene = new THREE.Scene();
+                    this.scene.fog = new THREE.Fog(0x000000, 1, 1000);
+                    
+                    // Camera
+                    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                    this.camera.position.z = 100;
+                    
+                    // Renderer
+                    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                    this.renderer.setClearColor(0x000000, 0);
+                    
+                    // Initial visualization
+                    this.updateVisualization();
+                    
+                    // Resize handler
+                    window.addEventListener('resize', this.onWindowResize);
+                },
+                
+                createParticles() {
+                    if (this.particleSystem) {
+                        this.scene.remove(this.particleSystem);
+                    }
+                    
+                    const geometry = new THREE.BufferGeometry();
+                    const positions = new Float32Array(this.particleCount * 3);
+                    const colors = new Float32Array(this.particleCount * 3);
+                    const sizes = new Float32Array(this.particleCount);
+                    
+                    for (let i = 0; i < this.particleCount; i++) {
+                        positions[i * 3] = (Math.random() - 0.5) * 200;
+                        positions[i * 3 + 1] = (Math.random() - 0.5) * 200;
+                        positions[i * 3 + 2] = (Math.random() - 0.5) * 200;
+                        
+                        const color = new THREE.Color(this.colorThemes[this.selectedColor].primary);
+                        colors[i * 3] = color.r;
+                        colors[i * 3 + 1] = color.g;
+                        colors[i * 3 + 2] = color.b;
+                        
+                        sizes[i] = Math.random() * 2 + 1;
+                    }
+                    
+                    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+                    
+                    const material = new THREE.ShaderMaterial({
+                        vertexShader: `
+                            attribute float size;
+                            varying vec3 vColor;
+                            void main() {
+                                vColor = color;
+                                vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                                gl_PointSize = size * (300.0 / -mvPosition.z);
+                                gl_Position = projectionMatrix * mvPosition;
+                            }
+                        `,
+                        fragmentShader: `
+                            varying vec3 vColor;
+                            void main() {
+                                float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+                                if (distance > 0.5) discard;
+                                float alpha = 1.0 - distance * 2.0;
+                                gl_FragColor = vec4(vColor, alpha);
+                            }
+                        `,
+                        transparent: true,
+                        vertexColors: true
+                    });
+                    
+                    this.particleSystem = new THREE.Points(geometry, material);
+                    this.scene.add(this.particleSystem);
+                    this.currentParticleCount = this.particleCount;
+                },
+                
+                createWaves() {
+                    if (this.waveGeometry) {
+                        this.scene.remove(this.waveGeometry);
+                    }
+                    
+                    const geometry = new THREE.PlaneGeometry(200, 200, 50, 50);
+                    const material = new THREE.MeshBasicMaterial({
+                        color: this.colorThemes[this.selectedColor].primary,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.8
+                    });
+                    
+                    this.waveGeometry = new THREE.Mesh(geometry, material);
+                    this.waveGeometry.rotation.x = -Math.PI / 2;
+                    this.scene.add(this.waveGeometry);
+                },
+                
+                createBars() {
+                    if (this.barsGroup) {
+                        this.scene.remove(this.barsGroup);
+                    }
+                    
+                    this.barsGroup = new THREE.Group();
+                    const barCount = 64;
+                    
+                    for (let i = 0; i < barCount; i++) {
+                        const geometry = new THREE.BoxGeometry(2, 1, 2);
+                        const material = new THREE.MeshBasicMaterial({
+                            color: this.colorThemes[this.selectedColor].primary
+                        });
+                        
+                        const bar = new THREE.Mesh(geometry, material);
+                        const angle = (i / barCount) * Math.PI * 2;
+                        bar.position.x = Math.cos(angle) * 30;
+                        bar.position.z = Math.sin(angle) * 30;
+                        
+                        this.barsGroup.add(bar);
+                    }
+                    
+                    this.scene.add(this.barsGroup);
+                },
+                
+                createSphere() {
+                    if (this.sphereGeometry) {
+                        this.scene.remove(this.sphereGeometry);
+                    }
+                    
+                    const geometry = new THREE.SphereGeometry(30, 32, 16);
+                    const material = new THREE.MeshBasicMaterial({
+                        color: this.colorThemes[this.selectedColor].primary,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.7
+                    });
+                    
+                    this.sphereGeometry = new THREE.Mesh(geometry, material);
+                    this.scene.add(this.sphereGeometry);
+                },
+                
+                updateVisualization() {
+                    // Clear existing objects
+                    if (this.particleSystem) this.scene.remove(this.particleSystem);
+                    if (this.waveGeometry) this.scene.remove(this.waveGeometry);
+                    if (this.barsGroup) this.scene.remove(this.barsGroup);
+                    if (this.sphereGeometry) this.scene.remove(this.sphereGeometry);
+                    
+                    switch (this.visualType) {
+                        case 'particles':
+                            this.createParticles();
+                            break;
+                        case 'waves':
+                            this.createWaves();
+                            break;
+                        case 'bars':
+                            this.createBars();
+                            break;
+                        case 'sphere':
+                            this.createSphere();
+                            break;
+                    }
+                },
+                
+                updateColors() {
+                    switch (this.visualType) {
+                        case 'particles':
+                            if (this.particleSystem) {
+                                const colors = this.particleSystem.geometry.attributes.color.array;
+                                const color = new THREE.Color(this.colorThemes[this.selectedColor].primary);
+                                
+                                for (let i = 0; i < colors.length; i += 3) {
+                                    colors[i] = color.r;
+                                    colors[i + 1] = color.g;
+                                    colors[i + 2] = color.b;
+                                }
+                                
+                                this.particleSystem.geometry.attributes.color.needsUpdate = true;
+                            }
+                            break;
+                        case 'waves':
+                            if (this.waveGeometry) {
+                                this.waveGeometry.material.color.set(this.colorThemes[this.selectedColor].primary);
+                            }
+                            break;
+                        case 'bars':
+                            if (this.barsGroup) {
+                                this.barsGroup.children.forEach(bar => {
+                                    bar.material.color.set(this.colorThemes[this.selectedColor].primary);
+                                });
+                            }
+                            break;
+                        case 'sphere':
+                            if (this.sphereGeometry) {
+                                this.sphereGeometry.material.color.set(this.colorThemes[this.selectedColor].primary);
+                            }
+                            break;
+                    }
+                },
+                
+                initAudioContext() {
+                    try {
+                        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        this.analyser = this.audioContext.createAnalyser();
+                        this.analyser.fftSize = 256;
+                        this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                        
+                        this.gainNode = this.audioContext.createGain();
+                        this.gainNode.connect(this.analyser);
+                        this.analyser.connect(this.audioContext.destination);
+                        
+                        this.gainNode.gain.value = this.volume / 100;
+                        
+                        this.audioReady = true;
+                        
+                        if (this.audioSource !== 'file') {
+                            this.startGeneratedAudio();
+                        }
+                    } catch (error) {
+                        console.error('Error initializing audio context:', error);
+                    }
+                },
+                
+                startGeneratedAudio() {
+                    if (this.audioSource === 'file') return;
+                    
+                    // Initialize audio context if not already done
+                    if (!this.audioContext) {
+                        this.initAudioContext();
+                    }
+                    
+                    this.stopAllOscillators();
+                    
+                    switch (this.audioSource) {
+                        case 'beat':
+                            this.generateBeat();
+                            break;
+                        case 'melody':
+                            this.generateMelody();
+                            break;
+                        case 'ambient':
+                            this.generateAmbient();
+                            break;
+                        case 'bass':
+                            this.generateBass();
+                            break;
+                    }
+                },
+                
+                generateBeat() {
+                    const beatInterval = 60000 / this.tempo; // ms per beat
+                    const frequencies = [80, 120, 200, 160]; // Kick, snare, hi-hat, mid
+                    
+                    this.beatPattern = setInterval(() => {
+                        if (!this.isPlaying) return;
+                        
+                        // Create multiple drum sounds
+                        frequencies.forEach((freq, index) => {
+                            setTimeout(() => {
+                                this.createDrumHit(freq, 0.1 + index * 0.05);
+                            }, index * 50);
+                        });
+                        
+                        // Add some variation
+                        if (Math.random() > 0.7) {
+                            setTimeout(() => {
+                                this.createDrumHit(300, 0.08);
+                            }, beatInterval * 0.5);
+                        }
+                    }, beatInterval);
+                },
+                
+                generateMelody() {
+                    const notes = [261.63, 293.66, 329.63, 349.23, 392.00, 440.00, 493.88, 523.25]; // C major scale
+                    const beatInterval = 60000 / this.tempo;
+                    
+                    this.melodyPattern = setInterval(() => {
+                        if (!this.isPlaying) return;
+                        
+                        // Main melody
+                        const note = notes[Math.floor(Math.random() * notes.length)];
+                        this.createMelodyNote(note, 0.3);
+                        
+                        // Harmony
+                        setTimeout(() => {
+                            const harmony = notes[Math.floor(Math.random() * notes.length)];
+                            this.createMelodyNote(harmony * 0.5, 0.2);
+                        }, beatInterval * 0.25);
+                        
+                        // Bass line
+                        setTimeout(() => {
+                            this.createBassNote(note * 0.25, 0.4);
+                        }, beatInterval * 0.5);
+                        
+                    }, beatInterval);
+                },
+                
+                generateAmbient() {
+                    // Create multiple ambient layers
+                    const frequencies = [55, 110, 165, 220, 330];
+                    
+                    frequencies.forEach((freq, index) => {
+                        setTimeout(() => {
+                            this.createAmbientTone(freq, 0.1 + index * 0.02);
+                        }, index * 200);
+                    });
+                    
+                    // Add periodic swells
+                    this.beatPattern = setInterval(() => {
+                        if (!this.isPlaying) return;
+                        
+                        const freq = 55 + Math.random() * 200;
+                        this.createAmbientSwell(freq, 0.15);
+                    }, 2000 + Math.random() * 3000);
+                },
+                
+                generateBass() {
+                    const bassNotes = [41.20, 55.00, 73.42, 82.41]; // Low E, A, D, E
+                    const beatInterval = 60000 / this.tempo;
+                    
+                    this.bassPattern = setInterval(() => {
+                        if (!this.isPlaying) return;
+                        
+                        // Main bass hit
+                        const note = bassNotes[Math.floor(Math.random() * bassNotes.length)];
+                        this.createBassHit(note, 0.6);
+                        
+                        // Sub bass
+                        setTimeout(() => {
+                            this.createBassHit(note * 0.5, 0.4);
+                        }, beatInterval * 0.25);
+                        
+                        // High energy hits
+                        if (Math.random() > 0.6) {
+                            setTimeout(() => {
+                                this.createBassHit(note * 2, 0.3);
+                            }, beatInterval * 0.75);
+                        }
+                    }, beatInterval);
+                },
+                
+                createDrumHit(frequency, duration) {
+                    const osc = this.audioContext.createOscillator();
+                    const gain = this.audioContext.createGain();
+                    
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+                    osc.frequency.exponentialRampToValueAtTime(frequency * 0.1, this.audioContext.currentTime + duration);
+                    
+                    gain.gain.setValueAtTime(this.volume / 100, this.audioContext.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.gainNode);
+                    
+                    osc.start();
+                    osc.stop(this.audioContext.currentTime + duration);
+                },
+                
+                createMelodyNote(frequency, duration) {
+                    const osc = this.audioContext.createOscillator();
+                    const gain = this.audioContext.createGain();
+                    
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+                    
+                    gain.gain.setValueAtTime(0, this.audioContext.currentTime);
+                    gain.gain.linearRampToValueAtTime(this.volume / 200, this.audioContext.currentTime + 0.1);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.gainNode);
+                    
+                    osc.start();
+                    osc.stop(this.audioContext.currentTime + duration);
+                },
+                
+                createBassNote(frequency, duration) {
+                    const osc = this.audioContext.createOscillator();
+                    const gain = this.audioContext.createGain();
+                    
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+                    
+                    gain.gain.setValueAtTime(this.volume / 150, this.audioContext.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + duration);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.gainNode);
+                    
+                    osc.start();
+                    osc.stop(this.audioContext.currentTime + duration);
+                },
+                
+                createAmbientTone(frequency, amplitude) {
+                    const osc = this.audioContext.createOscillator();
+                    const gain = this.audioContext.createGain();
+                    const lfo = this.audioContext.createOscillator();
+                    const lfoGain = this.audioContext.createGain();
+                    
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+                    
+                    lfo.type = 'sine';
+                    lfo.frequency.setValueAtTime(0.2, this.audioContext.currentTime);
+                    lfoGain.gain.setValueAtTime(amplitude * 0.5, this.audioContext.currentTime);
+                    
+                    lfo.connect(lfoGain);
+                    lfoGain.connect(gain.gain);
+                    
+                    gain.gain.setValueAtTime(amplitude * this.volume / 100, this.audioContext.currentTime);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.gainNode);
+                    
+                    osc.start();
+                    lfo.start();
+                    
+                    this.oscillators.push({ osc, gain, lfo });
+                },
+                
+                createAmbientSwell(frequency, amplitude) {
+                    const osc = this.audioContext.createOscillator();
+                    const gain = this.audioContext.createGain();
+                    
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+                    
+                    gain.gain.setValueAtTime(0, this.audioContext.currentTime);
+                    gain.gain.linearRampToValueAtTime(amplitude * this.volume / 100, this.audioContext.currentTime + 2);
+                    gain.gain.linearRampToValueAtTime(0, this.audioContext.currentTime + 4);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.gainNode);
+                    
+                    osc.start();
+                    osc.stop(this.audioContext.currentTime + 4);
+                },
+                
+                createBassHit(frequency, amplitude) {
+                    const osc = this.audioContext.createOscillator();
+                    const gain = this.audioContext.createGain();
+                    
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(frequency, this.audioContext.currentTime);
+                    
+                    gain.gain.setValueAtTime(amplitude * this.volume / 100, this.audioContext.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, this.audioContext.currentTime + 0.5);
+                    
+                    osc.connect(gain);
+                    gain.connect(this.gainNode);
+                    
+                    osc.start();
+                    osc.stop(this.audioContext.currentTime + 0.5);
+                },
+                
+                stopAllOscillators() {
+                    this.oscillators.forEach(({ osc, lfo }) => {
+                        try {
+                            osc.stop();
+                            if (lfo) lfo.stop();
+                        } catch (e) {
+                            // Oscillator might already be stopped
+                        }
+                    });
+                    this.oscillators = [];
+                    
+                    if (this.beatPattern) {
+                        clearInterval(this.beatPattern);
+                        this.beatPattern = null;
+                    }
+                    if (this.melodyPattern) {
+                        clearInterval(this.melodyPattern);
+                        this.melodyPattern = null;
+                    }
+                    if (this.bassPattern) {
+                        clearInterval(this.bassPattern);
+                        this.bassPattern = null;
+                    }
+                },
+                
+                handleAudioSourceChange() {
+                    this.stopAllOscillators();
+                    if (this.audio) {
+                        this.audio.pause();
+                        this.audio = null;
+                    }
+                    
+                    if (this.audioSource !== 'file') {
+                        if (!this.audioContext) {
+                            this.initAudioContext();
+                        } else {
+                            this.audioReady = true;
+                            this.startGeneratedAudio();
+                        }
+                    } else {
+                        this.audioReady = false;
+                        this.audioLoaded = false;
+                    }
+                    
+                    this.isPlaying = false;
+                },
+                
+                async loadAudio(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    this.loading = true;
+                    this.stopAllOscillators();
+                    
+                    try {
+                        // Create audio element
+                        this.audio = new Audio();
+                        this.audio.src = URL.createObjectURL(file);
+                        
+                        // Create analyser if not exists
+                        if (!this.audioContext) {
+                            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                            this.analyser = this.audioContext.createAnalyser();
+                            this.analyser.fftSize = 256;
+                            this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                        }
+                        
+                        const source = this.audioContext.createMediaElementSource(this.audio);
+                        source.connect(this.analyser);
+                        this.analyser.connect(this.audioContext.destination);
+                        
+                        this.audio.addEventListener('loadeddata', () => {
+                            this.audioLoaded = true;
+                            this.audioReady = true;
+                            this.loading = false;
+                        });
+                        
+                        this.audio.addEventListener('ended', () => {
+                            this.isPlaying = false;
+                        });
+                        
+                    } catch (error) {
+                        console.error('Error loading audio:', error);
+                        this.loading = false;
+                    }
+                },
+                
+                togglePlay() {
+                    if (this.audioSource === 'file') {
+                        if (!this.audio) return;
+                        
+                        if (this.isPlaying) {
+                            this.audio.pause();
+                            this.isPlaying = false;
+                        } else {
+                            if (this.audioContext && this.audioContext.state === 'suspended') {
+                                this.audioContext.resume();
+                            }
+                            this.audio.play();
+                            this.isPlaying = true;
+                        }
+                    } else {
+                        // Generated audio
+                        if (!this.audioContext) {
+                            this.initAudioContext();
+                        }
+                        
+                        if (this.audioContext.state === 'suspended') {
+                            this.audioContext.resume();
+                        }
+                        
+                        if (this.isPlaying) {
+                            this.isPlaying = false;
+                            this.stopAllOscillators();
+                        } else {
+                            this.isPlaying = true;
+                            this.startGeneratedAudio();
+                        }
+                    }
+                },
+                
+                animate() {
+                    this.animationId = requestAnimationFrame(this.animate);
+                    
+                    // Calculate FPS
+                    const now = performance.now();
+                    if (this.lastTime) {
+                        this.fps = Math.round(1000 / (now - this.lastTime));
+                    }
+                    this.lastTime = now;
+                    
+                    this.time += 0.01;
+                    
+                    if (this.analyser && this.dataArray) {
+                        this.analyser.getByteFrequencyData(this.dataArray);
+                        
+                        // Calculate audio level
+                        const sum = this.dataArray.reduce((a, b) => a + b, 0);
+                        this.audioLevel = Math.round((sum / this.dataArray.length / 255) * 100);
+                        
+                        this.updateVisualizationWithAudio();
+                    }
+                    
+                    // Camera movement
+                    this.camera.position.x = Math.sin(this.time * 0.1) * 50;
+                    this.camera.position.y = Math.cos(this.time * 0.15) * 30;
+                    this.camera.lookAt(0, 0, 0);
+                    
+                    this.renderer.render(this.scene, this.camera);
+                },
+                
+                updateVisualizationWithAudio() {
+                    if (!this.dataArray) return;
+                    
+                    const avg = this.dataArray.reduce((a, b) => a + b, 0) / this.dataArray.length;
+                    const intensity = avg / 255 * this.sensitivity;
+                    
+                    switch (this.visualType) {
+                        case 'particles':
+                            this.updateParticlesWithAudio(intensity);
+                            break;
+                        case 'waves':
+                            this.updateWavesWithAudio(intensity);
+                            break;
+                        case 'bars':
+                            this.updateBarsWithAudio();
+                            break;
+                        case 'sphere':
+                            this.updateSphereWithAudio(intensity);
+                            break;
+                    }
+                },
+                
+                updateParticlesWithAudio(intensity) {
+                    if (!this.particleSystem) return;
+                    
+                    const positions = this.particleSystem.geometry.attributes.position.array;
+                    const colors = this.particleSystem.geometry.attributes.color.array;
+                    const sizes = this.particleSystem.geometry.attributes.size.array;
+                    
+                    for (let i = 0; i < this.particleCount; i++) {
+                        const i3 = i * 3;
+                        
+                        // Update positions based on audio
+                        positions[i3] += (Math.random() - 0.5) * intensity * 2;
+                        positions[i3 + 1] += (Math.random() - 0.5) * intensity * 2;
+                        positions[i3 + 2] += (Math.random() - 0.5) * intensity * 2;
+                        
+                        // Update colors
+                        const color1 = new THREE.Color(this.colorThemes[this.selectedColor].primary);
+                        const color2 = new THREE.Color(this.colorThemes[this.selectedColor].secondary);
+                        const mixedColor = color1.lerp(color2, intensity);
+                        
+                        colors[i3] = mixedColor.r;
+                        colors[i3 + 1] = mixedColor.g;
+                        colors[i3 + 2] = mixedColor.b;
+                        
+                        // Update sizes
+                        sizes[i] = (1 + intensity * 3) * (Math.random() * 2 + 1);
+                    }
+                    
+                    this.particleSystem.geometry.attributes.position.needsUpdate = true;
+                    this.particleSystem.geometry.attributes.color.needsUpdate = true;
+                    this.particleSystem.geometry.attributes.size.needsUpdate = true;
+                    
+                    this.particleSystem.rotation.y += intensity * 0.05;
+                },
+                
+                updateWavesWithAudio(intensity) {
+                    if (!this.waveGeometry) return;
+                    
+                    const positions = this.waveGeometry.geometry.attributes.position.array;
+                    
+                    for (let i = 0; i < positions.length; i += 3) {
+                        const x = positions[i];
+                        const z = positions[i + 2];
+                        positions[i + 1] = Math.sin(x * 0.1 + this.time * 2) * intensity * 10 + 
+                                         Math.cos(z * 0.1 + this.time * 1.5) * intensity * 8;
+                    }
+                    
+                    this.waveGeometry.geometry.attributes.position.needsUpdate = true;
+                    this.waveGeometry.material.color.setHex(
+                        intensity > 0.5 ? 
+                        parseInt(this.colorThemes[this.selectedColor].secondary.replace('#', '0x')) :
+                        parseInt(this.colorThemes[this.selectedColor].primary.replace('#', '0x'))
+                    );
+                },
+                
+                updateBarsWithAudio() {
+                    if (!this.barsGroup) return;
+                    
+                    this.barsGroup.children.forEach((bar, index) => {
+                        const dataIndex = Math.floor(index / this.barsGroup.children.length * this.dataArray.length);
+                        const height = (this.dataArray[dataIndex] / 255) * 20 * this.sensitivity;
+                        
+                        bar.scale.y = Math.max(0.1, height);
+                        bar.position.y = height / 2;
+                        
+                        // Color based on frequency
+                        const intensity = this.dataArray[dataIndex] / 255;
+                        const color = new THREE.Color(this.colorThemes[this.selectedColor].primary);
+                        const color2 = new THREE.Color(this.colorThemes[this.selectedColor].secondary);
+                        bar.material.color = color.lerp(color2, intensity);
+                    });
+                    
+                    this.barsGroup.rotation.y += 0.005;
+                },
+                
+                updateSphereWithAudio(intensity) {
+                    if (!this.sphereGeometry) return;
+                    
+                    const scale = 1 + intensity * 0.5;
+                    this.sphereGeometry.scale.set(scale, scale, scale);
+                    this.sphereGeometry.rotation.x += intensity * 0.02;
+                    this.sphereGeometry.rotation.y += intensity * 0.03;
+                    
+                    // Update color
+                    const color1 = new THREE.Color(this.colorThemes[this.selectedColor].primary);
+                    const color2 = new THREE.Color(this.colorThemes[this.selectedColor].secondary);
+                    this.sphereGeometry.material.color = color1.lerp(color2, intensity);
+                },
+                
+                onWindowResize() {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                }
+            },
+            
+            beforeUnmount() {
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                }
+                if (this.audio) {
+                    this.audio.pause();
+                }
+                if (this.audioContext) {
+                    this.audioContext.close();
+                }
+                this.stopAllOscillators();
+                window.removeEventListener('resize', this.onWindowResize);
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
