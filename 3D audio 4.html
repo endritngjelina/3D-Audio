@@ -1,0 +1,1136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Audio Visualizer | Professional Grade</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.prod.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.12.2/dist/gsap.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+            overflow: hidden;
+            color: #fff;
+            height: 100vh;
+            perspective: 1000px;
+        }
+        
+        #app {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 25px;
+            left: 25px;
+            background: rgba(10, 10, 20, 0.85);
+            backdrop-filter: blur(15px);
+            border-radius: 20px;
+            padding: 25px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            z-index: 100;
+            min-width: 320px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            transition: transform 0.4s ease;
+        }
+        
+        .controls:hover {
+            transform: translateY(-5px);
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #a0a0d0;
+            font-weight: 500;
+            letter-spacing: 0.5px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            background: linear-gradient(to right, #ff006e, #8338ec);
+            outline: none;
+            border-radius: 4px;
+            -webkit-appearance: none;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            cursor: pointer;
+            border: 2px solid #8338ec;
+            box-shadow: 0 0 10px rgba(131, 56, 236, 0.7);
+        }
+        
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        input[type="file"]:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #8338ec;
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        
+        select:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #8338ec;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            background: linear-gradient(45deg, #ff006e, #8338ec);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 14px;
+            box-shadow: 0 5px 15px rgba(255, 0, 110, 0.4);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(255, 0, 110, 0.6);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        .audio-info {
+            position: absolute;
+            bottom: 25px;
+            left: 25px;
+            background: rgba(10, 10, 20, 0.85);
+            backdrop-filter: blur(15px);
+            border-radius: 15px;
+            padding: 18px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            z-index: 100;
+            min-width: 280px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            transition: transform 0.4s ease;
+        }
+        
+        .audio-info:hover {
+            transform: translateY(-5px);
+        }
+        
+        .visualizer-title {
+            font-size: 28px;
+            font-weight: 800;
+            background: linear-gradient(45deg, #ff006e, #8338ec, #3a86ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+            text-align: center;
+            letter-spacing: 1px;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+        
+        .demo-note {
+            font-size: 12px;
+            color: #888;
+            margin-top: 15px;
+            text-align: center;
+            opacity: 0.8;
+        }
+        
+        .audio-info div {
+            margin: 8px 0;
+            font-size: 14px;
+            color: #d0d0ff;
+        }
+        
+        .audio-info div strong {
+            color: #a0a0f0;
+            margin-right: 8px;
+        }
+        
+        .preset-selector {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .preset-btn {
+            flex: 1;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 12px;
+            text-align: center;
+        }
+        
+        .preset-btn:hover, .preset-btn.active {
+            background: linear-gradient(45deg, #ff006e, #8338ec);
+            border-color: transparent;
+        }
+        
+        .visualizer-count {
+            position: absolute;
+            top: 25px;
+            right: 25px;
+            background: rgba(10, 10, 20, 0.85);
+            backdrop-filter: blur(15px);
+            border-radius: 15px;
+            padding: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            z-index: 100;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            transition: transform 0.4s ease;
+        }
+        
+        .visualizer-count:hover {
+            transform: translateY(-5px);
+        }
+        
+        .visualizer-count h3 {
+            font-size: 16px;
+            margin-bottom: 8px;
+            color: #a0a0f0;
+        }
+        
+        .visualizer-count .count {
+            font-size: 32px;
+            font-weight: 700;
+            background: linear-gradient(45deg, #ff006e, #8338ec);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        
+        .title-bar {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            padding: 15px 0;
+            text-align: center;
+            z-index: 200;
+            background: linear-gradient(to bottom, rgba(10, 10, 20, 0.8), transparent);
+            backdrop-filter: blur(5px);
+        }
+        
+        .title-bar h1 {
+            font-size: 2.8rem;
+            font-weight: 800;
+            background: linear-gradient(45deg, #ff006e, #8338ec, #3a86ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 2px;
+            text-shadow: 0 2px 15px rgba(0, 0, 0, 0.4);
+        }
+        
+        .title-bar p {
+            font-size: 1.1rem;
+            color: #a0a0f0;
+            max-width: 600px;
+            margin: 5px auto 0;
+            line-height: 1.5;
+        }
+        
+        .beat-indicator {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ff006e;
+            box-shadow: 0 0 20px #ff006e;
+            z-index: 50;
+            opacity: 0.7;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 0.7; }
+        }
+        
+        .loading-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0f0c29, #302b63);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 1s ease;
+        }
+        
+        .loading-spinner {
+            width: 80px;
+            height: 80px;
+            border: 8px solid rgba(255, 255, 255, 0.1);
+            border-top: 8px solid #8338ec;
+            border-radius: 50%;
+            animation: spin 1.5s linear infinite;
+            margin-bottom: 30px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loading-text {
+            font-size: 24px;
+            font-weight: 600;
+            color: #d0d0ff;
+            text-align: center;
+            max-width: 500px;
+            line-height: 1.6;
+        }
+        
+        .loading-text .highlight {
+            color: #ff006e;
+            font-weight: 700;
+        }
+        
+        .status-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 10px 0;
+            background: rgba(10, 10, 20, 0.7);
+            backdrop-filter: blur(5px);
+            display: flex;
+            justify-content: center;
+            z-index: 200;
+            font-size: 14px;
+            color: #a0a0f0;
+        }
+        
+        .status-item {
+            margin: 0 20px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .status-item span {
+            margin-left: 8px;
+        }
+        
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4caf50;
+            display: inline-block;
+            margin-right: 8px;
+            box-shadow: 0 0 8px #4caf50;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                top: 15px;
+                left: 15px;
+                right: 15px;
+                min-width: auto;
+                width: calc(100% - 30px);
+            }
+            
+            .audio-info {
+                left: 15px;
+                right: 15px;
+                width: calc(100% - 30px);
+            }
+            
+            .title-bar h1 {
+                font-size: 2rem;
+            }
+            
+            .title-bar p {
+                font-size: 0.9rem;
+                padding: 0 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="loading-screen" id="loading-screen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">
+            Loading <span class="highlight">Quantum Audio Visualizer</span><br>
+            Initializing WebGL and Audio APIs...
+        </div>
+    </div>
+    
+    <div id="app">
+        <div class="title-bar">
+            <h1>QUANTUM AUDIO VISUALIZER</h1>
+            <p>Experience your music in immersive 3D with cutting-edge visualization technology</p>
+        </div>
+        
+        <div id="canvas-container"></div>
+        
+        <div class="controls">
+            <h2 class="visualizer-title">AUDIO CONTROLS</h2>
+            
+            <div class="control-group">
+                <label for="audio-file">Load Audio File:</label>
+                <input type="file" id="audio-file" accept="audio/*" @change="loadAudio">
+            </div>
+            
+            <div class="control-group">
+                <button @click="togglePlayPause" :disabled="!audioLoaded">
+                    {{ isPlaying ? '⏸ Pause' : '▶ Play' }}
+                </button>
+            </div>
+            
+            <div class="control-group">
+                <label for="visualizer-type">Visualizer Type:</label>
+                <select v-model="visualizerType" @change="changeVisualizerType">
+                    <option value="particles">Neural Particles</option>
+                    <option value="waves">Quantum Waves</option>
+                    <option value="bars">Frequency Bars</option>
+                    <option value="sphere">Harmonic Sphere</option>
+                    <option value="vortex">Audio Vortex</option>
+                    <option value="rings">Orbital Rings</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="sensitivity">Sensitivity: {{ sensitivity }}</label>
+                <input type="range" id="sensitivity" min="0.1" max="5" step="0.1" v-model="sensitivity">
+            </div>
+            
+            <div class="control-group">
+                <label for="color-speed">Color Speed: {{ colorSpeed }}</label>
+                <input type="range" id="color-speed" min="0.1" max="3" step="0.1" v-model="colorSpeed">
+            </div>
+            
+            <div class="control-group">
+                <label for="particle-count">Particle Count: {{ particleCount }}</label>
+                <input type="range" id="particle-count" min="500" max="10000" step="100" v-model="particleCount">
+            </div>
+            
+            <div class="preset-selector">
+                <div class="preset-btn" :class="{'active': preset === 'default'}" @click="setPreset('default')">Default</div>
+                <div class="preset-btn" :class="{'active': preset === 'chill'}" @click="setPreset('chill')">Chill</div>
+                <div class="preset-btn" :class="{'active': preset === 'intense'}" @click="setPreset('intense')">Intense</div>
+            </div>
+            
+            <div class="demo-note">
+                Professional-grade audio visualization with real-time processing
+            </div>
+        </div>
+        
+        <div class="audio-info" v-if="audioLoaded">
+            <div><strong>Status:</strong> {{ isPlaying ? 'Playing' : 'Paused' }}</div>
+            <div><strong>Visualizer:</strong> {{ visualizerType }}</div>
+            <div><strong>Frequency:</strong> {{ currentFrequency }}Hz</div>
+            <div><strong>Amplitude:</strong> {{ amplitude }}dB</div>
+            <div><strong>Beat:</strong> {{ beatDetected ? 'Detected' : 'Listening...' }}</div>
+        </div>
+        
+        <div class="visualizer-count">
+            <h3>PARTICLES</h3>
+            <div class="count">{{ particleCount }}</div>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-indicator"></div>
+                <span>WebGL: Active</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator"></div>
+                <span>Audio API: {{ audioContext ? 'Active' : 'Loading...' }}</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator"></div>
+                <span>FPS: {{ fps }}</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+        
+        createApp({
+            data() {
+                return {
+                    // Audio
+                    audioContext: null,
+                    audioElement: null,
+                    analyser: null,
+                    dataArray: null,
+                    source: null,
+                    isPlaying: false,
+                    audioLoaded: false,
+                    
+                    // Three.js
+                    scene: null,
+                    camera: null,
+                    renderer: null,
+                    particles: null,
+                    
+                    // Controls
+                    visualizerType: 'particles',
+                    sensitivity: 2.0,
+                    colorSpeed: 1.0,
+                    particleCount: 5000,
+                    preset: 'default',
+                    
+                    // Animation
+                    animationId: null,
+                    time: 0,
+                    currentFrequency: 0,
+                    amplitude: 0,
+                    beatDetected: false,
+                    beatTimeout: null,
+                    fps: 0,
+                    lastTime: 0,
+                    
+                    // Visualizer objects
+                    visualizerObjects: {
+                        particles: null,
+                        waves: null,
+                        bars: null,
+                        sphere: null,
+                        vortex: null,
+                        rings: null
+                    }
+                }
+            },
+            
+            mounted() {
+                // Hide loading screen after 2 seconds
+                setTimeout(() => {
+                    document.getElementById('loading-screen').style.opacity = '0';
+                    setTimeout(() => {
+                        document.getElementById('loading-screen').style.display = 'none';
+                    }, 1000);
+                }, 2000);
+                
+                this.initThreeJS();
+                this.initAudio();
+                this.createVisualizers();
+                this.animate();
+            },
+            
+            methods: {
+                initThreeJS() {
+                    // Scene with fog
+                    this.scene = new THREE.Scene();
+                    this.scene.background = new THREE.Color(0x000000);
+                    this.scene.fog = new THREE.Fog(0x0a0a2a, 20, 100);
+                    
+                    // Camera
+                    this.camera = new THREE.PerspectiveCamera(
+                        75,
+                        window.innerWidth / window.innerHeight,
+                        0.1,
+                        1000
+                    );
+                    this.camera.position.z = 60;
+                    
+                    // Renderer with antialiasing
+                    this.renderer = new THREE.WebGLRenderer({ 
+                        antialias: true,
+                        alpha: true
+                    });
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                    this.renderer.shadowMap.enabled = true;
+                    
+                    const container = document.getElementById('canvas-container');
+                    container.appendChild(this.renderer.domElement);
+                    
+                    // Add ambient light
+                    const ambientLight = new THREE.AmbientLight(0x333366, 0.6);
+                    this.scene.add(ambientLight);
+                    
+                    // Add directional light
+                    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                    directionalLight.position.set(1, 1, 1);
+                    directionalLight.castShadow = true;
+                    this.scene.add(directionalLight);
+                    
+                    // Add point light
+                    const pointLight = new THREE.PointLight(0xff006e, 1, 100);
+                    pointLight.position.set(10, 20, 15);
+                    this.scene.add(pointLight);
+                    
+                    // Handle resize
+                    window.addEventListener('resize', this.onWindowResize);
+                },
+                
+                initAudio() {
+                    // Initialize Web Audio API
+                    this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    this.analyser = this.audioContext.createAnalyser();
+                    this.analyser.fftSize = 1024;
+                    
+                    const bufferLength = this.analyser.frequencyBinCount;
+                    this.dataArray = new Uint8Array(bufferLength);
+                },
+                
+                createVisualizers() {
+                    // Particles
+                    this.createParticles();
+                    
+                    // Waves
+                    this.createWaves();
+                    
+                    // Bars
+                    this.createBars();
+                    
+                    // Sphere
+                    this.createSphere();
+                    
+                    // Vortex
+                    this.createVortex();
+                    
+                    // Rings
+                    this.createRings();
+                    
+                    // Show only the selected visualizer
+                    this.changeVisualizerType();
+                },
+                
+                createParticles() {
+                    const geometry = new THREE.BufferGeometry();
+                    const positions = new Float32Array(this.particleCount * 3);
+                    const colors = new Float32Array(this.particleCount * 3);
+                    const sizes = new Float32Array(this.particleCount);
+                    
+                    for (let i = 0; i < this.particleCount; i++) {
+                        const i3 = i * 3;
+                        positions[i3] = (Math.random() - 0.5) * 200;
+                        positions[i3 + 1] = (Math.random() - 0.5) * 200;
+                        positions[i3 + 2] = (Math.random() - 0.5) * 200;
+                        
+                        colors[i3] = Math.random() * 0.5 + 0.5;
+                        colors[i3 + 1] = Math.random() * 0.3;
+                        colors[i3 + 2] = Math.random() * 0.5 + 0.5;
+                        
+                        sizes[i] = Math.random() * 3 + 1;
+                    }
+                    
+                    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+                    
+                    const material = new THREE.PointsMaterial({
+                        size: 2,
+                        vertexColors: true,
+                        transparent: true,
+                        opacity: 0.9,
+                        sizeAttenuation: true
+                    });
+                    
+                    this.visualizerObjects.particles = new THREE.Points(geometry, material);
+                    this.scene.add(this.visualizerObjects.particles);
+                },
+                
+                createWaves() {
+                    const geometry = new THREE.PlaneGeometry(200, 200, 128, 128);
+                    const material = new THREE.MeshStandardMaterial({
+                        color: 0x8338ec,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.7,
+                        emissive: 0x3a86ff,
+                        emissiveIntensity: 0.3
+                    });
+                    
+                    this.visualizerObjects.waves = new THREE.Mesh(geometry, material);
+                    this.visualizerObjects.waves.rotation.x = -Math.PI / 2;
+                    this.visualizerObjects.waves.position.y = -20;
+                    this.scene.add(this.visualizerObjects.waves);
+                },
+                
+                createBars() {
+                    const group = new THREE.Group();
+                    const barCount = 128;
+                    
+                    for (let i = 0; i < barCount; i++) {
+                        const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
+                        const material = new THREE.MeshStandardMaterial({
+                            color: new THREE.Color().setHSL(i / barCount, 1, 0.5),
+                            emissive: new THREE.Color().setHSL(i / barCount, 1, 0.2),
+                            emissiveIntensity: 0.5
+                        });
+                        
+                        const bar = new THREE.Mesh(geometry, material);
+                        const angle = (i / barCount) * Math.PI * 2;
+                        const radius = 25;
+                        bar.position.x = Math.cos(angle) * radius;
+                        bar.position.z = Math.sin(angle) * radius;
+                        bar.position.y = 0.5;
+                        bar.rotation.x = Math.PI / 2;
+                        
+                        group.add(bar);
+                    }
+                    
+                    this.visualizerObjects.bars = group;
+                    this.scene.add(this.visualizerObjects.bars);
+                },
+                
+                createSphere() {
+                    const geometry = new THREE.SphereGeometry(20, 64, 64);
+                    const material = new THREE.MeshStandardMaterial({
+                        color: 0xff006e,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.8,
+                        emissive: 0x8338ec,
+                        emissiveIntensity: 0.4
+                    });
+                    
+                    this.visualizerObjects.sphere = new THREE.Mesh(geometry, material);
+                    this.scene.add(this.visualizerObjects.sphere);
+                },
+                
+                createVortex() {
+                    const group = new THREE.Group();
+                    const particleCount = 3000;
+                    const geometry = new THREE.BufferGeometry();
+                    const positions = new Float32Array(particleCount * 3);
+                    
+                    for (let i = 0; i < particleCount; i++) {
+                        const i3 = i * 3;
+                        const radius = Math.random() * 30 + 10;
+                        const angle = Math.random() * Math.PI * 2;
+                        const height = (Math.random() - 0.5) * 50;
+                        
+                        positions[i3] = Math.cos(angle) * radius;
+                        positions[i3 + 1] = height;
+                        positions[i3 + 2] = Math.sin(angle) * radius;
+                    }
+                    
+                    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    
+                    const material = new THREE.PointsMaterial({
+                        size: 3,
+                        color: 0x3a86ff,
+                        transparent: true,
+                        opacity: 0.8
+                    });
+                    
+                    this.visualizerObjects.vortex = new THREE.Points(geometry, material);
+                    this.scene.add(this.visualizerObjects.vortex);
+                },
+                
+                createRings() {
+                    const group = new THREE.Group();
+                    const ringCount = 8;
+                    
+                    for (let i = 0; i < ringCount; i++) {
+                        const geometry = new THREE.RingGeometry(15 + i*3, 16 + i*3, 128);
+                        const material = new THREE.MeshBasicMaterial({
+                            color: new THREE.Color().setHSL(i / ringCount, 1, 0.5),
+                            side: THREE.DoubleSide,
+                            transparent: true,
+                            opacity: 0.7
+                        });
+                        
+                        const ring = new THREE.Mesh(geometry, material);
+                        ring.rotation.x = Math.PI / 2;
+                        ring.position.y = -20 + i * 5;
+                        
+                        group.add(ring);
+                    }
+                    
+                    this.visualizerObjects.rings = group;
+                    this.scene.add(this.visualizerObjects.rings);
+                },
+                
+                loadAudio(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    const url = URL.createObjectURL(file);
+                    
+                    if (this.audioElement) {
+                        this.audioElement.pause();
+                    }
+                    
+                    this.audioElement = new Audio(url);
+                    this.audioElement.crossOrigin = 'anonymous';
+                    
+                    this.audioElement.addEventListener('loadeddata', () => {
+                        if (this.source) {
+                            this.source.disconnect();
+                        }
+                        
+                        this.source = this.audioContext.createMediaElementSource(this.audioElement);
+                        this.source.connect(this.analyser);
+                        this.analyser.connect(this.audioContext.destination);
+                        
+                        this.audioLoaded = true;
+                        this.beatDetected = false;
+                    });
+                    
+                    this.audioElement.addEventListener('error', (e) => {
+                        console.error('Audio error:', e);
+                        alert('Error loading audio file. Please try another file.');
+                    });
+                    
+                    this.audioElement.load();
+                },
+                
+                togglePlayPause() {
+                    if (!this.audioElement) return;
+                    
+                    if (this.audioContext.state === 'suspended') {
+                        this.audioContext.resume();
+                    }
+                    
+                    if (this.isPlaying) {
+                        this.audioElement.pause();
+                    } else {
+                        this.audioElement.play().catch(e => {
+                            console.error('Playback failed:', e);
+                            alert('Playback failed. Please interact with the page first or try a different browser.');
+                        });
+                    }
+                    
+                    this.isPlaying = !this.isPlaying;
+                },
+                
+                changeVisualizerType() {
+                    // Hide all visualizers
+                    Object.values(this.visualizerObjects).forEach(obj => {
+                        if (obj) obj.visible = false;
+                    });
+                    
+                    // Show selected visualizer
+                    if (this.visualizerObjects[this.visualizerType]) {
+                        this.visualizerObjects[this.visualizerType].visible = true;
+                    }
+                },
+                
+                setPreset(preset) {
+                    this.preset = preset;
+                    
+                    switch(preset) {
+                        case 'chill':
+                            this.sensitivity = 1.0;
+                            this.colorSpeed = 0.5;
+                            this.particleCount = 3000;
+                            break;
+                        case 'intense':
+                            this.sensitivity = 3.0;
+                            this.colorSpeed = 1.5;
+                            this.particleCount = 8000;
+                            break;
+                        default:
+                            this.sensitivity = 2.0;
+                            this.colorSpeed = 1.0;
+                            this.particleCount = 5000;
+                    }
+                },
+                
+                detectBeat() {
+                    // Calculate average amplitude
+                    let sum = 0;
+                    for (let i = 0; i < this.dataArray.length; i++) {
+                        sum += this.dataArray[i];
+                    }
+                    const avg = sum / this.dataArray.length;
+                    this.amplitude = Math.round(avg);
+                    
+                    // Simple beat detection
+                    if (avg > 180 && !this.beatDetected) {
+                        this.beatDetected = true;
+                        
+                        // Create beat indicator
+                        const beatIndicator = document.createElement('div');
+                        beatIndicator.className = 'beat-indicator';
+                        beatIndicator.style.left = `${Math.random() * 90 + 5}%`;
+                        beatIndicator.style.top = `${Math.random() * 70 + 15}%`;
+                        document.getElementById('app').appendChild(beatIndicator);
+                        
+                        // Remove after animation
+                        setTimeout(() => {
+                            beatIndicator.remove();
+                        }, 1000);
+                        
+                        // Reset beat after timeout
+                        if (this.beatTimeout) clearTimeout(this.beatTimeout);
+                        this.beatTimeout = setTimeout(() => {
+                            this.beatDetected = false;
+                        }, 200);
+                    }
+                },
+                
+                animate() {
+                    this.animationId = requestAnimationFrame(this.animate);
+                    
+                    // Calculate FPS
+                    const now = performance.now();
+                    if (this.lastTime) {
+                        this.fps = Math.round(1000 / (now - this.lastTime));
+                    }
+                    this.lastTime = now;
+                    
+                    this.time += 0.01;
+                    
+                    if (this.analyser && this.isPlaying) {
+                        this.analyser.getByteFrequencyData(this.dataArray);
+                        this.detectBeat();
+                        this.updateVisualizers();
+                    }
+                    
+                    // Rotate camera around scene
+                    this.camera.position.x = Math.cos(this.time * 0.05) * 70;
+                    this.camera.position.z = Math.sin(this.time * 0.05) * 70;
+                    this.camera.position.y = Math.sin(this.time * 0.03) * 20;
+                    this.camera.lookAt(0, 0, 0);
+                    
+                    this.renderer.render(this.scene, this.camera);
+                },
+                
+                updateVisualizers() {
+                    const avg = this.dataArray.reduce((a, b) => a + b) / this.dataArray.length;
+                    this.currentFrequency = Math.round(avg);
+                    
+                    switch (this.visualizerType) {
+                        case 'particles':
+                            this.updateParticles();
+                            break;
+                        case 'waves':
+                            this.updateWaves();
+                            break;
+                        case 'bars':
+                            this.updateBars();
+                            break;
+                        case 'sphere':
+                            this.updateSphere();
+                            break;
+                        case 'vortex':
+                            this.updateVortex();
+                            break;
+                        case 'rings':
+                            this.updateRings();
+                            break;
+                    }
+                },
+                
+                updateParticles() {
+                    const particles = this.visualizerObjects.particles;
+                    if (!particles) return;
+                    
+                    const positions = particles.geometry.attributes.position.array;
+                    const colors = particles.geometry.attributes.color.array;
+                    
+                    for (let i = 0; i < this.particleCount; i++) {
+                        const i3 = i * 3;
+                        const frequency = this.dataArray[i % this.dataArray.length];
+                        const scale = (frequency / 255) * this.sensitivity;
+                        
+                        // Update positions with audio data
+                        positions[i3 + 1] += (Math.random() - 0.5) * scale * 2;
+                        
+                        // Update colors with dynamic hues
+                        const hue = (this.time * this.colorSpeed + i * 0.0005) % 1;
+                        const color = new THREE.Color().setHSL(hue, 1, 0.5);
+                        colors[i3] = color.r;
+                        colors[i3 + 1] = color.g;
+                        colors[i3 + 2] = color.b;
+                    }
+                    
+                    particles.geometry.attributes.position.needsUpdate = true;
+                    particles.geometry.attributes.color.needsUpdate = true;
+                },
+                
+                updateWaves() {
+                    const waves = this.visualizerObjects.waves;
+                    if (!waves) return;
+                    
+                    const positions = waves.geometry.attributes.position.array;
+                    const avg = this.dataArray.reduce((a, b) => a + b) / this.dataArray.length;
+                    
+                    for (let i = 0; i < positions.length; i += 3) {
+                        const x = positions[i];
+                        const z = positions[i + 2];
+                        const distance = Math.sqrt(x * x + z * z);
+                        const wave = Math.sin(distance * 0.1 + this.time * 3) * (avg / 255) * this.sensitivity * 15;
+                        positions[i + 1] = wave;
+                    }
+                    
+                    waves.geometry.attributes.position.needsUpdate = true;
+                    
+                    // Update color
+                    const hue = (this.time * this.colorSpeed) % 1;
+                    waves.material.color.setHSL(hue, 1, 0.5);
+                },
+                
+                updateBars() {
+                    const bars = this.visualizerObjects.bars;
+                    if (!bars) return;
+                    
+                    bars.children.forEach((bar, i) => {
+                        const frequency = this.dataArray[i % this.dataArray.length];
+                        const scale = (frequency / 255) * this.sensitivity;
+                        
+                        bar.scale.y = 1 + scale * 15;
+                        bar.position.y = (scale * 15) / 2;
+                        
+                        // Update color
+                        const hue = (this.time * this.colorSpeed + i * 0.01) % 1;
+                        bar.material.color.setHSL(hue, 1, 0.5);
+                    });
+                },
+                
+                updateSphere() {
+                    const sphere = this.visualizerObjects.sphere;
+                    if (!sphere) return;
+                    
+                    const avg = this.dataArray.reduce((a, b) => a + b) / this.dataArray.length;
+                    const scale = 1 + (avg / 255) * this.sensitivity * 0.5;
+                    
+                    sphere.scale.setScalar(scale);
+                    sphere.rotation.x += 0.01;
+                    sphere.rotation.y += 0.02;
+                    
+                    // Update color
+                    const hue = (this.time * this.colorSpeed) % 1;
+                    sphere.material.color.setHSL(hue, 1, 0.5);
+                },
+                
+                updateVortex() {
+                    const vortex = this.visualizerObjects.vortex;
+                    if (!vortex) return;
+                    
+                    const positions = vortex.geometry.attributes.position.array;
+                    
+                    for (let i = 0; i < positions.length / 3; i++) {
+                        const i3 = i * 3;
+                        const frequency = this.dataArray[i % this.dataArray.length];
+                        const scale = (frequency / 255) * this.sensitivity;
+                        
+                        // Create vortex effect
+                        positions[i3] += (Math.random() - 0.5) * scale;
+                        positions[i3 + 1] -= 0.1;
+                        positions[i3 + 2] += (Math.random() - 0.5) * scale;
+                        
+                        // Reset position when out of bounds
+                        if (positions[i3 + 1] < -25) {
+                            positions[i3 + 1] = 25;
+                        }
+                    }
+                    
+                    vortex.geometry.attributes.position.needsUpdate = true;
+                    
+                    // Rotate the vortex
+                    vortex.rotation.y += 0.01;
+                },
+                
+                updateRings() {
+                    const rings = this.visualizerObjects.rings;
+                    if (!rings) return;
+                    
+                    const avg = this.dataArray.reduce((a, b) => a + b) / this.dataArray.length;
+                    
+                    rings.children.forEach((ring, i) => {
+                        const frequency = this.dataArray[i % this.dataArray.length];
+                        const scale = 1 + (frequency / 255) * this.sensitivity * 0.5;
+                        
+                        ring.scale.setScalar(scale);
+                        ring.rotation.z += 0.005 * (i + 1);
+                        
+                        // Update color
+                        const hue = (this.time * this.colorSpeed + i * 0.1) % 1;
+                        ring.material.color.setHSL(hue, 1, 0.5);
+                    });
+                },
+                
+                onWindowResize() {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                }
+            },
+            
+            beforeUnmount() {
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                }
+                
+                if (this.audioElement) {
+                    this.audioElement.pause();
+                }
+                
+                if (this.audioContext) {
+                    this.audioContext.close();
+                }
+                
+                window.removeEventListener('resize', this.onWindowResize);
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
