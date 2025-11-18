@@ -1,0 +1,1388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced 3D Audio Visualizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/3.3.4/vue.global.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            overflow: hidden;
+            color: white;
+            height: 100vh;
+        }
+
+        #app {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #visualizer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+
+        .gradient-bg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(45deg, #0a0a0a, #1a1a2e, #16213e, #0f3460);
+            background-size: 400% 400%;
+            z-index: 0;
+            opacity: 0.9;
+            animation: gradientBG 20s ease infinite;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(12px);
+            padding: 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            min-width: 300px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .controls.collapsed {
+            transform: translateX(-90%);
+            opacity: 0.7;
+        }
+
+        .toggle-controls {
+            position: absolute;
+            top: 15px;
+            right: -40px;
+            width: 35px;
+            height: 35px;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            z-index: 11;
+            transition: all 0.3s ease;
+        }
+
+        .toggle-controls:hover {
+            background: rgba(30, 30, 50, 0.8);
+            transform: scale(1.1);
+        }
+
+        .toggle-controls i {
+            font-size: 18px;
+        }
+
+        .control-group {
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .control-group:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .control-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            cursor: pointer;
+        }
+
+        .control-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-title i {
+            font-size: 20px;
+        }
+
+        .collapse-btn {
+            background: none;
+            border: none;
+            color: #ccc;
+            cursor: pointer;
+            font-size: 18px;
+            transition: transform 0.3s ease;
+        }
+
+        .collapse-btn.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .control-content {
+            overflow: hidden;
+            transition: height 0.4s ease, opacity 0.3s ease;
+        }
+
+        .control-content.collapsed {
+            height: 0 !important;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #bbb;
+            font-weight: 500;
+        }
+
+        input[type="file"] {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        input[type="file"]:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        input[type="range"] {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            outline: none;
+            -webkit-appearance: none;
+            margin: 12px 0;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 22px;
+            height: 22px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 107, 107, 0.5);
+            border: 2px solid white;
+            transition: all 0.2s ease;
+        }
+
+        input[type="range"]::-webkit-slider-thumb:hover {
+            transform: scale(1.1);
+            box-shadow: 0 0 15px rgba(255, 107, 107, 0.8);
+        }
+
+        select {
+            width: 100%;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+            margin-bottom: 15px;
+            transition: all 0.3s ease;
+        }
+
+        select:hover {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .btn.primary {
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+        }
+
+        .btn.primary:hover {
+            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.5);
+            transform: translateY(-3px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .color-picker {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 10px;
+        }
+
+        .color-option {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .color-option.active {
+            border-color: white;
+            transform: scale(1.15);
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+
+        .color-option:hover:not(.active) {
+            transform: scale(1.1);
+        }
+
+        .color-gradient {
+            width: 100%;
+            height: 20px;
+            border-radius: 10px;
+            margin-top: 10px;
+            background: linear-gradient(to right, var(--color1), var(--color2));
+            box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.3);
+        }
+
+        .stats {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 15px 20px;
+            border-radius: 15px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            font-size: 14px;
+            color: #ccc;
+            display: flex;
+            gap: 20px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: bold;
+            color: #4ecdc4;
+            margin-top: 5px;
+        }
+
+        .info-overlay {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 10;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            padding: 10px 20px;
+            border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 15;
+            color: white;
+            font-size: 18px;
+            text-align: center;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(10px);
+            padding: 30px 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+        }
+
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid #ff6b6b;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .visualizer-title {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            text-align: center;
+            font-size: 28px;
+            font-weight: 800;
+            color: transparent;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #00c9ff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+            letter-spacing: 1px;
+        }
+
+        .progress-container {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            max-width: 600px;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            z-index: 10;
+            overflow: hidden;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(to right, #ff6b6b, #4ecdc4);
+            border-radius: 10px;
+            width: 0%;
+            transition: width 0.1s linear;
+        }
+
+        .time-display {
+            position: absolute;
+            bottom: 85px;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 12px;
+        }
+
+        .current-time {
+            left: 10%;
+        }
+
+        .duration {
+            right: 10%;
+        }
+
+        /* Particle Galaxy effect */
+        .galaxy-particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            .controls {
+                width: 90%;
+                left: 5%;
+                min-width: auto;
+            }
+            
+            .stats {
+                top: auto;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                width: 90%;
+                justify-content: space-around;
+            }
+            
+            .visualizer-title {
+                font-size: 22px;
+                top: 15px;
+            }
+        }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div id="app">
+        <div class="gradient-bg"></div>
+        <canvas id="visualizer"></canvas>
+        
+        <div class="galaxy-particles"></div>
+        
+        <h1 class="visualizer-title">NEON AUDIO DIMENSION</h1>
+        
+        <div class="controls" :class="{ collapsed: controlsCollapsed }">
+            <div class="toggle-controls" @click="controlsCollapsed = !controlsCollapsed">
+                <i :class="controlsCollapsed ? 'fa-solid fa-chevron-right' : 'fa-solid fa-chevron-left'"></i>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-header" @click="toggleSection('audio')">
+                    <div class="control-title">
+                        <i class="fa-solid fa-music"></i>
+                        Audio Source
+                    </div>
+                    <button class="collapse-btn" :class="{ collapsed: collapsedSections.audio }">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="control-content" :class="{ collapsed: collapsedSections.audio }" ref="audioSection">
+                    <div class="control-group">
+                        <label>Upload Audio File</label>
+                        <input type="file" @change="loadAudio" accept="audio/*">
+                    </div>
+                    
+                    <div class="btn-group">
+                        <button class="btn primary" @click="togglePlay" :disabled="!audioLoaded">
+                            <i :class="isPlaying ? 'fa-solid fa-pause' : 'fa-solid fa-play'"></i>
+                            {{ isPlaying ? 'Pause' : 'Play' }}
+                        </button>
+                        <button class="btn" @click="useMicrophone" :disabled="micActive">
+                            <i class="fa-solid fa-microphone"></i>
+                            {{ micActive ? 'Active' : 'Mic' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-header" @click="toggleSection('visual')">
+                    <div class="control-title">
+                        <i class="fa-solid fa-cube"></i>
+                        Visualization
+                    </div>
+                    <button class="collapse-btn" :class="{ collapsed: collapsedSections.visual }">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="control-content" :class="{ collapsed: collapsedSections.visual }" ref="visualSection">
+                    <div class="control-group">
+                        <label>Visualization Type</label>
+                        <select v-model="visualType">
+                            <option value="particles">Particle Galaxy</option>
+                            <option value="waves">Audio Waves</option>
+                            <option value="bars">Frequency Bars</option>
+                            <option value="sphere">Pulsing Sphere</option>
+                            <option value="fractal">Audio Fractal</option>
+                            <option value="fluid">Audio Fluid</option>
+                        </select>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Color Theme</label>
+                        <div class="color-picker">
+                            <div class="color-option" 
+                                 v-for="(color, index) in colorThemes" 
+                                 :key="index"
+                                 :style="{ background: color.primary }"
+                                 :class="{ active: selectedColor === index }"
+                                 @click="selectedColor = index">
+                            </div>
+                        </div>
+                        <div class="color-gradient" 
+                             :style="{ '--color1': colorThemes[selectedColor].primary, '--color2': colorThemes[selectedColor].secondary }">
+                        </div>
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Sensitivity: {{ sensitivity }}</label>
+                        <input type="range" v-model="sensitivity" min="0.1" max="3" step="0.1">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Particle Count: {{ particleCount }}</label>
+                        <input type="range" v-model="particleCount" min="1000" max="15000" step="500">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="control-header" @click="toggleSection('effects')">
+                    <div class="control-title">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i>
+                        Effects & Camera
+                    </div>
+                    <button class="collapse-btn" :class="{ collapsed: collapsedSections.effects }">
+                        <i class="fa-solid fa-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="control-content" :class="{ collapsed: collapsedSections.effects }" ref="effectsSection">
+                    <div class="control-group">
+                        <label>Camera Movement: {{ cameraMovement }}</label>
+                        <input type="range" v-model="cameraMovement" min="0" max="2" step="0.1">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Background Intensity: {{ bgIntensity }}</label>
+                        <input type="range" v-model="bgIntensity" min="0" max="1" step="0.1">
+                    </div>
+                    
+                    <div class="control-group">
+                        <label>Bloom Effect: {{ bloomIntensity }}</label>
+                        <input type="range" v-model="bloomIntensity" min="0" max="2" step="0.1">
+                    </div>
+                    
+                    <button class="btn" @click="resetCamera">
+                        <i class="fa-solid fa-arrows-rotate"></i>
+                        Reset Camera
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <div class="stats">
+            <div class="stat-item">
+                <span>FPS</span>
+                <div class="stat-value">{{ fps }}</div>
+            </div>
+            <div class="stat-item">
+                <span>Particles</span>
+                <div class="stat-value">{{ currentParticleCount }}</div>
+            </div>
+            <div class="stat-item">
+                <span>Audio Level</span>
+                <div class="stat-value">{{ audioLevel }}%</div>
+            </div>
+            <div class="stat-item">
+                <span>CPU</span>
+                <div class="stat-value">{{ cpuLoad }}%</div>
+            </div>
+        </div>
+        
+        <div class="progress-container" v-if="audioLoaded">
+            <div class="progress-bar" :style="{ width: progress + '%' }"></div>
+            <div class="time-display current-time">{{ formatTime(currentTime) }}</div>
+            <div class="time-display duration">{{ formatTime(duration) }}</div>
+        </div>
+        
+        <div class="info-overlay" v-if="!audioLoaded && !micActive">
+            <p><i class="fa-solid fa-arrow-up"></i> Upload an audio file or use microphone to begin</p>
+        </div>
+        
+        <div class="loading" v-if="loading">
+            <div class="spinner"></div>
+            <p>Processing audio...</p>
+        </div>
+    </div>
+
+    <script>
+        const { createApp } = Vue;
+
+        createApp({
+            data() {
+                return {
+                    // Audio
+                    audio: null,
+                    audioContext: null,
+                    analyser: null,
+                    dataArray: null,
+                    audioLoaded: false,
+                    isPlaying: false,
+                    loading: false,
+                    micActive: false,
+                    currentTime: 0,
+                    duration: 0,
+                    progress: 0,
+                    
+                    // Three.js
+                    scene: null,
+                    camera: null,
+                    renderer: null,
+                    particles: null,
+                    particleSystem: null,
+                    waveGeometry: null,
+                    barsGroup: null,
+                    sphereGeometry: null,
+                    fractalGroup: null,
+                    fluidGeometry: null,
+                    
+                    // Controls
+                    visualType: 'particles',
+                    selectedColor: 0,
+                    sensitivity: 1.5,
+                    particleCount: 8000,
+                    cameraMovement: 1.0,
+                    bgIntensity: 0.8,
+                    bloomIntensity: 0.7,
+                    controlsCollapsed: false,
+                    collapsedSections: {
+                        audio: false,
+                        visual: false,
+                        effects: true
+                    },
+                    
+                    // Stats
+                    fps: 0,
+                    currentParticleCount: 0,
+                    audioLevel: 0,
+                    cpuLoad: 0,
+                    lastFrameTime: performance.now(),
+                    
+                    // Animation
+                    animationId: null,
+                    time: 0,
+                    
+                    colorThemes: [
+                        { primary: '#ff6b6b', secondary: '#4ecdc4' },
+                        { primary: '#a8e6cf', secondary: '#ffd93d' },
+                        { primary: '#ff8a80', secondary: '#b388ff' },
+                        { primary: '#64b5f6', secondary: '#4db6ac' },
+                        { primary: '#ffb74d', secondary: '#f06292' },
+                        { primary: '#81c784', secondary: '#7986cb' },
+                        { primary: '#f78fb3', secondary: '#546de5' },
+                        { primary: '#e66767', secondary: '#303952' }
+                    ]
+                };
+            },
+            
+            mounted() {
+                this.initThreeJS();
+                this.animate();
+                
+                // Initialize sections with their natural height
+                this.$nextTick(() => {
+                    this.collapsedSections.audio = false;
+                    this.collapsedSections.visual = false;
+                    this.collapsedSections.effects = true;
+                });
+            },
+            
+            watch: {
+                visualType() {
+                    this.updateVisualization();
+                },
+                selectedColor() {
+                    this.updateColors();
+                },
+                particleCount() {
+                    if (this.visualType === 'particles') {
+                        this.createParticles();
+                    }
+                },
+                bgIntensity() {
+                    this.updateBackground();
+                }
+            },
+            
+            methods: {
+                initThreeJS() {
+                    const canvas = document.getElementById('visualizer');
+                    
+                    // Scene
+                    this.scene = new THREE.Scene();
+                    this.scene.fog = new THREE.Fog(0x000000, 1, 1000);
+                    
+                    // Camera
+                    this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+                    this.camera.position.z = 150;
+                    
+                    // Renderer
+                    this.renderer = new THREE.WebGLRenderer({ 
+                        canvas, 
+                        antialias: true,
+                        powerPreference: "high-performance"
+                    });
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                    this.renderer.setPixelRatio(window.devicePixelRatio);
+                    this.renderer.setClearColor(0x000000, 0);
+                    
+                    // Add some initial lighting
+                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                    this.scene.add(ambientLight);
+                    
+                    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                    directionalLight.position.set(1, 1, 1);
+                    this.scene.add(directionalLight);
+                    
+                    // Point light for sphere effect
+                    const pointLight = new THREE.PointLight(this.colorThemes[this.selectedColor].primary, 1, 200);
+                    pointLight.position.set(50, 50, 50);
+                    this.scene.add(pointLight);
+                    
+                    // Initial visualization
+                    this.updateVisualization();
+                    
+                    // Resize handler
+                    window.addEventListener('resize', this.onWindowResize);
+                    
+                    // Create galaxy particles for background effect
+                    this.createGalaxyParticles();
+                },
+                
+                createGalaxyParticles() {
+                    const particlesContainer = document.querySelector('.galaxy-particles');
+                    particlesContainer.innerHTML = '';
+                    
+                    for (let i = 0; i < 150; i++) {
+                        const particle = document.createElement('div');
+                        particle.className = 'galaxy-particle';
+                        particle.style.cssText = `
+                            position: absolute;
+                            width: ${Math.random() * 3 + 1}px;
+                            height: ${Math.random() * 3 + 1}px;
+                            background: white;
+                            border-radius: 50%;
+                            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+                            opacity: ${Math.random() * 0.7 + 0.1};
+                        `;
+                        
+                        // Random position
+                        const x = Math.random() * 100;
+                        const y = Math.random() * 100;
+                        particle.style.left = `${x}%`;
+                        particle.style.top = `${y}%`;
+                        
+                        particlesContainer.appendChild(particle);
+                        
+                        // Animate with GSAP
+                        gsap.to(particle, {
+                            x: (Math.random() - 0.5) * 100,
+                            y: (Math.random() - 0.5) * 100,
+                            duration: Math.random() * 50 + 20,
+                            repeat: -1,
+                            yoyo: true,
+                            ease: "sine.inOut"
+                        });
+                    }
+                },
+                
+                createParticles() {
+                    if (this.particleSystem) {
+                        this.scene.remove(this.particleSystem);
+                    }
+                    
+                    const geometry = new THREE.BufferGeometry();
+                    const positions = new Float32Array(this.particleCount * 3);
+                    const colors = new Float32Array(this.particleCount * 3);
+                    const sizes = new Float32Array(this.particleCount);
+                    const velocities = new Float32Array(this.particleCount * 3);
+                    
+                    for (let i = 0; i < this.particleCount; i++) {
+                        positions[i * 3] = (Math.random() - 0.5) * 300;
+                        positions[i * 3 + 1] = (Math.random() - 0.5) * 300;
+                        positions[i * 3 + 2] = (Math.random() - 0.5) * 300;
+                        
+                        const color = new THREE.Color(this.colorThemes[this.selectedColor].primary);
+                        colors[i * 3] = color.r;
+                        colors[i * 3 + 1] = color.g;
+                        colors[i * 3 + 2] = color.b;
+                        
+                        sizes[i] = Math.random() * 2 + 1;
+                        
+                        // Initial velocity
+                        velocities[i * 3] = (Math.random() - 0.5) * 0.1;
+                        velocities[i * 3 + 1] = (Math.random() - 0.5) * 0.1;
+                        velocities[i * 3 + 2] = (Math.random() - 0.5) * 0.1;
+                    }
+                    
+                    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+                    geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
+                    geometry.setAttribute('velocity', new THREE.BufferAttribute(velocities, 3));
+                    
+                    const material = new THREE.ShaderMaterial({
+                        vertexShader: `
+                            attribute float size;
+                            attribute vec3 velocity;
+                            varying vec3 vColor;
+                            varying vec3 vPosition;
+                            uniform float time;
+                            
+                            void main() {
+                                vColor = color;
+                                vPosition = position;
+                                
+                                // Apply gravity and movement
+                                vec3 newPosition = position;
+                                newPosition += velocity * time * 2.0;
+                                
+                                // Center gravity
+                                float dist = distance(newPosition, vec3(0.0, 0.0, 0.0));
+                                if (dist > 0.0) {
+                                    newPosition -= normalize(newPosition) * 0.1;
+                                }
+                                
+                                vec4 mvPosition = modelViewMatrix * vec4(newPosition, 1.0);
+                                gl_PointSize = size * (300.0 / -mvPosition.z);
+                                gl_Position = projectionMatrix * mvPosition;
+                            }
+                        `,
+                        fragmentShader: `
+                            varying vec3 vColor;
+                            varying vec3 vPosition;
+                            
+                            void main() {
+                                float distance = length(gl_PointCoord - vec2(0.5, 0.5));
+                                if (distance > 0.5) discard;
+                                
+                                // Glow effect based on distance from center
+                                float distFromCenter = distance(vPosition, vec3(0.0, 0.0, 0.0));
+                                float glow = 0.5 / (distFromCenter * 0.1 + 0.1);
+                                
+                                float alpha = 1.0 - distance * 2.0;
+                                alpha *= glow;
+                                
+                                gl_FragColor = vec4(vColor, alpha);
+                            }
+                        `,
+                        transparent: true,
+                        vertexColors: true,
+                        uniforms: {
+                            time: { value: 0 }
+                        }
+                    });
+                    
+                    this.particleSystem = new THREE.Points(geometry, material);
+                    this.scene.add(this.particleSystem);
+                    this.currentParticleCount = this.particleCount;
+                },
+                
+                createWaves() {
+                    if (this.waveGeometry) {
+                        this.scene.remove(this.waveGeometry);
+                    }
+                    
+                    const geometry = new THREE.PlaneGeometry(200, 200, 50, 50);
+                    const material = new THREE.MeshStandardMaterial({
+                        color: this.colorThemes[this.selectedColor].primary,
+                        wireframe: true,
+                        transparent: true,
+                        opacity: 0.8,
+                        emissive: this.colorThemes[this.selectedColor].secondary,
+                        emissiveIntensity: 0.5
+                    });
+                    
+                    this.waveGeometry = new THREE.Mesh(geometry, material);
+                    this.waveGeometry.rotation.x = -Math.PI / 2;
+                    this.scene.add(this.waveGeometry);
+                },
+                
+                createBars() {
+                    if (this.barsGroup) {
+                        this.scene.remove(this.barsGroup);
+                    }
+                    
+                    this.barsGroup = new THREE.Group();
+                    const barCount = 64;
+                    
+                    for (let i = 0; i < barCount; i++) {
+                        const geometry = new THREE.CylinderGeometry(0.8, 0.8, 1, 8);
+                        const material = new THREE.MeshStandardMaterial({
+                            color: this.colorThemes[this.selectedColor].primary,
+                            emissive: this.colorThemes[this.selectedColor].secondary,
+                            emissiveIntensity: 0.3
+                        });
+                        
+                        const bar = new THREE.Mesh(geometry, material);
+                        const angle = (i / barCount) * Math.PI * 2;
+                        bar.position.x = Math.cos(angle) * 40;
+                        bar.position.z = Math.sin(angle) * 40;
+                        bar.position.y = 0;
+                        
+                        this.barsGroup.add(bar);
+                    }
+                    
+                    this.scene.add(this.barsGroup);
+                },
+                
+                createSphere() {
+                    if (this.sphereGeometry) {
+                        this.scene.remove(this.sphereGeometry);
+                    }
+                    
+                    const geometry = new THREE.SphereGeometry(30, 64, 32);
+                    const material = new THREE.MeshStandardMaterial({
+                        color: this.colorThemes[this.selectedColor].primary,
+                        wireframe: false,
+                        transparent: true,
+                        opacity: 0.7,
+                        emissive: this.colorThemes[this.selectedColor].secondary,
+                        emissiveIntensity: 0.5
+                    });
+                    
+                    this.sphereGeometry = new THREE.Mesh(geometry, material);
+                    this.scene.add(this.sphereGeometry);
+                },
+                
+                createFractal() {
+                    if (this.fractalGroup) {
+                        this.scene.remove(this.fractalGroup);
+                    }
+                    
+                    this.fractalGroup = new THREE.Group();
+                    const levels = 5;
+                    const size = 20;
+                    
+                    const createBranch = (x, y, z, size, depth) => {
+                        if (depth > levels) return;
+                        
+                        const geometry = new THREE.BoxGeometry(size, size, size);
+                        const material = new THREE.MeshStandardMaterial({
+                            color: this.colorThemes[this.selectedColor].primary,
+                            emissive: this.colorThemes[this.selectedColor].secondary,
+                            emissiveIntensity: 0.2
+                        });
+                        
+                        const cube = new THREE.Mesh(geometry, material);
+                        cube.position.set(x, y, z);
+                        this.fractalGroup.add(cube);
+                        
+                        // Create smaller branches
+                        const newSize = size * 0.7;
+                        const offset = size + newSize;
+                        
+                        createBranch(x + offset, y, z, newSize, depth + 1);
+                        createBranch(x - offset, y, z, newSize, depth + 1);
+                        createBranch(x, y + offset, z, newSize, depth + 1);
+                        createBranch(x, y - offset, z, newSize, depth + 1);
+                        createBranch(x, y, z + offset, newSize, depth + 1);
+                        createBranch(x, y, z - offset, newSize, depth + 1);
+                    };
+                    
+                    createBranch(0, 0, 0, size, 0);
+                    this.scene.add(this.fractalGroup);
+                },
+                
+                createFluid() {
+                    if (this.fluidGeometry) {
+                        this.scene.remove(this.fluidGeometry);
+                    }
+                    
+                    const geometry = new THREE.IcosahedronGeometry(25, 4);
+                    const material = new THREE.MeshPhongMaterial({
+                        color: this.colorThemes[this.selectedColor].primary,
+                        transparent: true,
+                        opacity: 0.8,
+                        wireframe: true
+                    });
+                    
+                    this.fluidGeometry = new THREE.Mesh(geometry, material);
+                    this.scene.add(this.fluidGeometry);
+                },
+                
+                updateVisualization() {
+                    // Clear existing objects
+                    if (this.particleSystem) this.scene.remove(this.particleSystem);
+                    if (this.waveGeometry) this.scene.remove(this.waveGeometry);
+                    if (this.barsGroup) this.scene.remove(this.barsGroup);
+                    if (this.sphereGeometry) this.scene.remove(this.sphereGeometry);
+                    if (this.fractalGroup) this.scene.remove(this.fractalGroup);
+                    if (this.fluidGeometry) this.scene.remove(this.fluidGeometry);
+                    
+                    switch (this.visualType) {
+                        case 'particles':
+                            this.createParticles();
+                            break;
+                        case 'waves':
+                            this.createWaves();
+                            break;
+                        case 'bars':
+                            this.createBars();
+                            break;
+                        case 'sphere':
+                            this.createSphere();
+                            break;
+                        case 'fractal':
+                            this.createFractal();
+                            break;
+                        case 'fluid':
+                            this.createFluid();
+                            break;
+                    }
+                },
+                
+                updateColors() {
+                    this.updateVisualization();
+                },
+                
+                updateBackground() {
+                    const bg = document.querySelector('.gradient-bg');
+                    bg.style.opacity = this.bgIntensity;
+                },
+                
+                async loadAudio(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    this.loading = true;
+                    
+                    try {
+                        // Create audio context
+                        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        
+                        // Create audio element
+                        this.audio = new Audio();
+                        this.audio.src = URL.createObjectURL(file);
+                        
+                        // Create analyser
+                        this.analyser = this.audioContext.createAnalyser();
+                        this.analyser.fftSize = 512;
+                        
+                        const source = this.audioContext.createMediaElementSource(this.audio);
+                        source.connect(this.analyser);
+                        this.analyser.connect(this.audioContext.destination);
+                        
+                        this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                        
+                        this.audio.addEventListener('loadeddata', () => {
+                            this.audioLoaded = true;
+                            this.loading = false;
+                            this.duration = this.audio.duration;
+                            
+                            // Update progress as audio plays
+                            this.audio.addEventListener('timeupdate', () => {
+                                this.currentTime = this.audio.currentTime;
+                                this.progress = (this.currentTime / this.duration) * 100;
+                            });
+                        });
+                        
+                        this.audio.addEventListener('ended', () => {
+                            this.isPlaying = false;
+                        });
+                        
+                    } catch (error) {
+                        console.error('Error loading audio:', error);
+                        this.loading = false;
+                    }
+                },
+                
+                async useMicrophone() {
+                    try {
+                        this.loading = true;
+                        this.micActive = true;
+                        
+                        if (!this.audioContext) {
+                            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                        }
+                        
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        const source = this.audioContext.createMediaStreamSource(stream);
+                        
+                        this.analyser = this.audioContext.createAnalyser();
+                        this.analyser.fftSize = 512;
+                        source.connect(this.analyser);
+                        
+                        this.dataArray = new Uint8Array(this.analyser.frequencyBinCount);
+                        this.audioLoaded = true;
+                        this.loading = false;
+                        
+                    } catch (error) {
+                        console.error('Error accessing microphone:', error);
+                        this.loading = false;
+                        this.micActive = false;
+                        alert('Microphone access denied. Please allow access to use this feature.');
+                    }
+                },
+                
+                togglePlay() {
+                    if (!this.audio && !this.micActive) return;
+                    
+                    if (this.micActive) {
+                        this.isPlaying = !this.isPlaying;
+                        return;
+                    }
+                    
+                    if (this.isPlaying) {
+                        this.audio.pause();
+                        this.isPlaying = false;
+                    } else {
+                        this.audio.play();
+                        this.isPlaying = true;
+                    }
+                },
+                
+                toggleSection(section) {
+                    this.collapsedSections[section] = !this.collapsedSections[section];
+                },
+                
+                resetCamera() {
+                    gsap.to(this.camera.position, {
+                        x: 0,
+                        y: 0,
+                        z: 150,
+                        duration: 1.5,
+                        ease: "expo.out"
+                    });
+                    
+                    gsap.to(this.camera.rotation, {
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        duration: 1.5,
+                        ease: "expo.out"
+                    });
+                },
+                
+                formatTime(seconds) {
+                    if (isNaN(seconds)) return '0:00';
+                    
+                    const minutes = Math.floor(seconds / 60);
+                    const secs = Math.floor(seconds % 60);
+                    return `${minutes}:${secs < 10 ? '0' : ''}${secs}`;
+                },
+                
+                animate() {
+                    this.animationId = requestAnimationFrame(this.animate);
+                    
+                    // Calculate FPS
+                    const now = performance.now();
+                    const deltaTime = now - this.lastFrameTime;
+                    this.lastFrameTime = now;
+                    this.fps = Math.round(1000 / deltaTime);
+                    
+                    // Simulate CPU load
+                    this.cpuLoad = Math.min(100, Math.round(this.audioLevel / 2 + Math.random() * 10));
+                    
+                    this.time += 0.01;
+                    
+                    if (this.analyser && this.dataArray) {
+                        this.analyser.getByteFrequencyData(this.dataArray);
+                        
+                        // Calculate audio level
+                        let sum = 0;
+                        for (let i = 0; i < this.dataArray.length; i++) {
+                            sum += this.dataArray[i];
+                        }
+                        this.audioLevel = Math.round((sum / this.dataArray.length / 255) * 100);
+                        
+                        this.updateVisualizationWithAudio();
+                    }
+                    
+                    // Camera movement
+                    if (this.cameraMovement > 0) {
+                        this.camera.position.x = Math.sin(this.time * 0.1 * this.cameraMovement) * 80;
+                        this.camera.position.y = Math.cos(this.time * 0.15 * this.cameraMovement) * 50;
+                        this.camera.position.z = 150 + Math.sin(this.time * 0.05) * 30;
+                        this.camera.lookAt(0, 0, 0);
+                    }
+                    
+                    // Update particle system time uniform
+                    if (this.particleSystem) {
+                        this.particleSystem.material.uniforms.time.value = this.time;
+                    }
+                    
+                    this.renderer.render(this.scene, this.camera);
+                },
+                
+                updateVisualizationWithAudio() {
+                    if (!this.dataArray) return;
+                    
+                    const avg = this.dataArray.reduce((a, b) => a + b, 0) / this.dataArray.length;
+                    const intensity = avg / 255 * this.sensitivity;
+                    
+                    switch (this.visualType) {
+                        case 'particles':
+                            this.updateParticlesWithAudio(intensity);
+                            break;
+                        case 'waves':
+                            this.updateWavesWithAudio(intensity);
+                            break;
+                        case 'bars':
+                            this.updateBarsWithAudio();
+                            break;
+                        case 'sphere':
+                            this.updateSphereWithAudio(intensity);
+                            break;
+                        case 'fractal':
+                            this.updateFractalWithAudio(intensity);
+                            break;
+                        case 'fluid':
+                            this.updateFluidWithAudio(intensity);
+                            break;
+                    }
+                },
+                
+                updateParticlesWithAudio(intensity) {
+                    if (!this.particleSystem) return;
+                    
+                    // We'll let the shader handle most of the movement
+                    this.particleSystem.rotation.y += intensity * 0.02;
+                    this.particleSystem.rotation.x += intensity * 0.01;
+                },
+                
+                updateWavesWithAudio(intensity) {
+                    if (!this.waveGeometry) return;
+                    
+                    const positions = this.waveGeometry.geometry.attributes.position.array;
+                    
+                    for (let i = 0; i < positions.length; i += 3) {
+                        const x = positions[i];
+                        const z = positions[i + 2];
+                        positions[i + 1] = Math.sin(x * 0.1 + this.time * 2) * intensity * 12 + 
+                                         Math.cos(z * 0.1 + this.time * 1.5) * intensity * 10;
+                    }
+                    
+                    this.waveGeometry.geometry.attributes.position.needsUpdate = true;
+                    this.waveGeometry.material.emissiveIntensity = intensity * 0.7;
+                },
+                
+                updateBarsWithAudio() {
+                    if (!this.barsGroup) return;
+                    
+                    this.barsGroup.children.forEach((bar, index) => {
+                        const dataIndex = Math.floor(index / this.barsGroup.children.length * this.dataArray.length);
+                        const height = (this.dataArray[dataIndex] / 255) * 30 * this.sensitivity;
+                        
+                        bar.scale.y = Math.max(0.1, height);
+                        bar.position.y = height / 2;
+                        
+                        // Color based on frequency
+                        const intensity = this.dataArray[dataIndex] / 255;
+                        bar.material.emissiveIntensity = intensity * 0.8;
+                    });
+                    
+                    this.barsGroup.rotation.y += 0.01;
+                },
+                
+                updateSphereWithAudio(intensity) {
+                    if (!this.sphereGeometry) return;
+                    
+                    const scale = 1 + intensity * 0.8;
+                    this.sphereGeometry.scale.set(scale, scale, scale);
+                    this.sphereGeometry.rotation.x += intensity * 0.03;
+                    this.sphereGeometry.rotation.y += intensity * 0.04;
+                    
+                    // Pulsing emissive effect
+                    this.sphereGeometry.material.emissiveIntensity = intensity * 0.7;
+                },
+                
+                updateFractalWithAudio(intensity) {
+                    if (!this.fractalGroup) return;
+                    
+                    this.fractalGroup.rotation.x += intensity * 0.01;
+                    this.fractalGroup.rotation.y += intensity * 0.015;
+                    this.fractalGroup.rotation.z += intensity * 0.005;
+                    
+                    // Scale based on intensity
+                    const scale = 1 + intensity * 0.3;
+                    this.fractalGroup.scale.set(scale, scale, scale);
+                },
+                
+                updateFluidWithAudio(intensity) {
+                    if (!this.fluidGeometry) return;
+                    
+                    // Create a fluid-like deformation
+                    const positions = this.fluidGeometry.geometry.attributes.position.array;
+                    const originalPositions = this.fluidGeometry.geometry.attributes.position.originalPositions;
+                    
+                    if (!originalPositions) {
+                        // Store original positions
+                        this.fluidGeometry.geometry.attributes.position.originalPositions = [...positions];
+                    }
+                    
+                    for (let i = 0; i < positions.length; i += 3) {
+                        const ix = i / 3;
+                        const x = originalPositions ? originalPositions[i] : positions[i];
+                        const y = originalPositions ? originalPositions[i + 1] : positions[i + 1];
+                        const z = originalPositions ? originalPositions[i + 2] : positions[i + 2];
+                        
+                        // Create wave-like motion
+                        const wave = Math.sin(x * 0.2 + this.time) * intensity * 5 +
+                                   Math.cos(y * 0.2 + this.time * 1.3) * intensity * 5 +
+                                   Math.sin(z * 0.2 + this.time * 0.7) * intensity * 5;
+                        
+                        positions[i] = x + wave * 0.1;
+                        positions[i + 1] = y + wave * 0.1;
+                        positions[i + 2] = z + wave * 0.1;
+                    }
+                    
+                    this.fluidGeometry.geometry.attributes.position.needsUpdate = true;
+                    this.fluidGeometry.rotation.y += 0.005;
+                },
+                
+                onWindowResize() {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                }
+            },
+            
+            beforeUnmount() {
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                }
+                if (this.audio) {
+                    this.audio.pause();
+                }
+                if (this.audioContext) {
+                    this.audioContext.close();
+                }
+                window.removeEventListener('resize', this.onWindowResize);
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
